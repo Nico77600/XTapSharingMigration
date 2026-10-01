@@ -8,7 +8,7 @@
 #
 @{
     RootModule        = 'XTapSharingMigration.psm1'
-    ModuleVersion     = '1.0.0'
+    ModuleVersion     = '1.0.1'
     GUID              = '4f0c7b0e-3a5d-4b8e-9d6f-2c1a7e5b9a31'
     Author            = 'Nicolas Fabert'
     Description       = 'X-TAP Sharing Migration: inventories Exchange Online organization relationships, sharing policies and availability address spaces, and configures the equivalent Microsoft 365 cross-tenant access policy (Free/Busy, MailTips, calendar sharing) in two phases, Entra and Exchange.'

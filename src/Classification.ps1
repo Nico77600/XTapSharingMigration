@@ -7,9 +7,9 @@
 
     Reasons (code - meaning - can the administrator force it in Selection.csv?):
       InScope         external Microsoft 365 tenant                                       -
-      Hybrid          Exchange hybrid with this organization's own on-premises servers    no  (Exchange hybrid application)
+      Hybrid          Exchange hybrid with this organization's own on-premises servers    no  (dedicated Exchange hybrid application)
       SameTenant      a domain of this tenant                                             no
-      OnPremises      the partner endpoint is not Exchange Online                         yes (if the endpoint is outdated)
+      OnPremises      partner on Exchange Server: the endpoint is not Exchange Online       no  (not part of this migration)
       Disabled        disabled in Exchange Online                                         yes
       Unused          sharing policy assigned to no mailbox                               yes
       TenantNotFound  no Microsoft Entra tenant for the domain                            no
@@ -22,9 +22,9 @@
 
 $script:Reasons = [ordered]@{
     InScope         = @{ Text = 'External Microsoft 365 tenant'; Overridable = $false }
-    Hybrid          = @{ Text = 'Exchange hybrid with this organization (handled by the Exchange hybrid application)'; Overridable = $false }
+    Hybrid          = @{ Text = 'Exchange hybrid of this organization - out of scope, handled by the dedicated Exchange hybrid application'; Overridable = $false }
     SameTenant      = @{ Text = 'Domain of this tenant'; Overridable = $false }
-    OnPremises      = @{ Text = 'Partner endpoint is not Exchange Online (on-premises organization)'; Overridable = $true }
+    OnPremises      = @{ Text = 'Partner on Exchange Server (endpoint not Exchange Online) - out of scope, not part of this migration'; Overridable = $false }
     Disabled        = @{ Text = 'Disabled in Exchange Online'; Overridable = $true }
     Unused          = @{ Text = 'Sharing policy assigned to no mailbox'; Overridable = $true }
     TenantNotFound  = @{ Text = 'No Microsoft Entra tenant for this domain'; Overridable = $false }
@@ -116,10 +116,11 @@ function Get-XsmDiscoveredGroupScope {
 }
 
 function Get-XsmAssessment {
-    <# Reason of an item, in the order of the checks. #>
+    <# Reason of an item, in the order of the checks. Hybrid and on-premises come first: never in scope, whatever the rest. #>
     param([bool]$Hybrid, [bool]$Enabled, $Bucket, [string]$EndpointKind = 'Microsoft365', [string]$OwnTenantId, [bool]$Unused, [bool]$NotMigratable)
     if ($Hybrid) { return 'Hybrid' }
     if ($Bucket -and $Bucket.TenantId -and $Bucket.TenantId -eq $OwnTenantId) { return 'SameTenant' }
+    if ($EndpointKind -eq 'OnPremises') { return 'OnPremises' }
     if ($NotMigratable) { return 'NotMigratable' }
     if (-not $Enabled) { return 'Disabled' }
     if ($Bucket) {
@@ -129,7 +130,6 @@ function Get-XsmAssessment {
             'ResolutionError' { return 'ResolutionError' }
         }
     }
-    if ($EndpointKind -eq 'OnPremises') { return 'OnPremises' }
     if ($Unused) { return 'Unused' }
     return 'InScope'
 }
@@ -167,6 +167,8 @@ function Get-XsmMigrationItems {
     $items = [Collections.Generic.List[object]]::new()
     $sources = [Collections.Generic.List[object]]::new()
     $partnerLabel = { param($bucket) $first = if (@($bucket.Domains).Count) { @($bucket.Domains)[0] } else { '' }; if ($bucket.DisplayName -and $first) { "$($bucket.DisplayName) ($first)" } elseif ($bucket.DisplayName) { $bucket.DisplayName } elseif ($first) { $first } else { $bucket.TenantId } }
+    $onPremNote = { param($values) "Partner endpoint on Exchange Server: $(@($values | Where-Object { $_ } | ForEach-Object { $u = $null; if ([Uri]::TryCreate($_, [UriKind]::Absolute, [ref]$u) -and $u.Host) { $u.Host } else { $_ } } | Select-Object -Unique) -join ', '). Out of scope, cannot be forced: sharing with an on-premises organization is not part of this migration." }
+    $hybridNote = 'Exchange hybrid of this organization: out of scope, cannot be forced. It moves with the dedicated Exchange hybrid application.'
     $cloudNote = { param($bucket) if ($ownCloud -and $bucket.Cloud -and $bucket.Cloud -ne $ownCloud) { "Partner in another Microsoft cloud ($($bucket.Cloud)): Microsoft cloud settings must allow it in Microsoft Entra (not configured by this tool)." } }
 
     # Organization relationships ---------------------------------------------------------------------
@@ -194,6 +196,8 @@ function Get-XsmMigrationItems {
                 $scope = Get-XsmDiscoveredGroupScope $f.Group
                 $notes = @($scope.Notes)
                 if ($reason -eq 'InScope' -and $endpointKind -eq 'Undetermined') { $notes += 'No partner endpoint is set on the relationship; the partner tenant was found in Microsoft Entra.' }
+                if ($reason -eq 'OnPremises') { $notes += & $onPremNote @($o.TargetApplicationUri, $o.TargetSharingEpr, $o.TargetAutodiscoverEpr) }
+                if ($reason -eq 'Hybrid') { $notes += $hybridNote }
                 if ($otherUses.Count) { $notes += "The relationship is also used for: $($otherUses -join ', ') (not migrated by this tool; keep the relationship for these uses)." }
                 $notes += & $cloudNote $bucket
                 $items.Add((New-XsmItem @{
@@ -233,6 +237,8 @@ function Get-XsmMigrationItems {
             'Availability address spaces do not use EWS. The cutover removes the address space (it cannot be disabled), once the partner has configured its side.'
         )
         if ($reason -eq 'NotMigratable') { $notes = @("AccessMethod $($a.AccessMethod): only OrgWideFBToken can be migrated to Microsoft 365 X-TAP.") }
+        if ($reason -eq 'OnPremises') { $notes = @(& $onPremNote @($a.TargetServiceEpr, $a.TargetAutodiscoverEpr)) }
+        if ($reason -eq 'Hybrid') { $notes = @($hybridNote) }
         $notes += & $cloudNote $bucket
         $items.Add((New-XsmItem @{
                     ItemId = ('AS{0:00}-FB' -f $n); Source = 'AvailabilityAddressSpace'; SourceName = $forest; Feature = 'FreeBusy'; Target = 'Partner'

@@ -2,7 +2,7 @@
 #  X-TAP Sharing Migration - configuration file
 #  --------------------------------------------------------------------------
 #  Author  : Nicolas Fabert
-#  Version : 1.0.0
+#  Version : 1.0.1
 #
 #  Read by Invoke-XTapSharingMigration.ps1. It is a PowerShell data file: text between quotes,
 #  $true / $false, numbers, @( ) for lists and @{ } for groups of settings. Lines starting with # are
@@ -47,7 +47,7 @@
         BackupExchangeObjects         = $true    # Export-Clixml of the Exchange objects into the run folder (rollback of the manual cutover)
         HybridRelationshipNamePattern = '^O365 to On-premises'   # organization relationship created by the Hybrid Configuration Wizard: out of scope
         # Host names that identify a partner hosted in Exchange Online (TargetSharingEpr, TargetAutodiscoverEpr,
-        # TargetApplicationUri). Another host means an on-premises partner: out of scope.
+        # TargetApplicationUri). Another host means a partner on Exchange Server: out of scope, cannot be forced.
         Microsoft365Endpoints         = @('outlook.com', 'office365.com', 'office365.us', 'outlook.office365.us', 'outlook.cn', 'partner.outlook.cn')
     }
 

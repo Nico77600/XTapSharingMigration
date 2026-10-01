@@ -3,7 +3,7 @@
 <#
     X-TAP Sharing Migration - automated tests (Pester 5 or later).
     Author  : Nicolas Fabert
-    Version : 1.0.0
+    Version : 1.0.1
 
     Run:  Invoke-Pester -Path .\tests -Output Detailed
 
@@ -120,11 +120,21 @@ Describe 'Classification' {
     }
     It 'flags an on-premises partner, a disabled relationship and a domain without tenant' {
         (Get-Item $script:Snap 'OR03-FB').Reason | Should -Be 'OnPremises'
+        (Get-Item $script:Snap 'OR03-FB').Overridable | Should -BeFalse
+        (Get-Item $script:Snap 'OR03-FB').Notes -join ' ' | Should -Match 'mail\.tailspintoys\.com.*cannot be forced'
         (Get-Item $script:Snap 'OR04-FB').Reason | Should -Be 'Disabled'
         $northwind = @($script:Snap.Items | Where-Object { $_.SourceName -eq 'Northwind' })
         $northwind.Count | Should -Be 2
         @($northwind | Where-Object Status -eq 'InScope')[0].PartnerDomains | Should -Be @('northwind.com', 'northwindtraders.com')
         @($northwind | Where-Object Status -ne 'InScope')[0].Reason | Should -Be 'TenantNotFound'
+    }
+    It 'never puts hybrid or on-premises in scope, even disabled, unused or without tenant' {
+        InModuleScope XTapSharingMigration {
+            $b = @{ TenantId = ''; Status = 'NotFound' }
+            Get-XsmAssessment -Hybrid $false -Enabled $false -Bucket $b -EndpointKind 'OnPremises' -OwnTenantId 'x' -Unused $true -NotMigratable $true | Should -Be 'OnPremises'
+            Get-XsmAssessment -Hybrid $true -Enabled $false -EndpointKind 'OnPremises' -OwnTenantId 'x' | Should -Be 'Hybrid'
+            foreach ($r in 'Hybrid', 'OnPremises') { $script:Reasons[$r].Overridable | Should -BeFalse }
+        }
     }
     It 'creates no item for a relationship used only for mailbox moves' {
         @($script:Snap.Items | Where-Object SourceName -eq 'MoveOnly').Count | Should -Be 0
@@ -203,7 +213,7 @@ Describe 'Decisions and Selection.csv' {
         $rows.Count | Should -Be @($script:Snap.Items).Count
         ($rows | Where-Object ItemId -eq 'OR02-FB').Include | Should -Be 'Yes'
         ($rows | Where-Object ItemId -eq 'OR03-FB').Include | Should -Be 'No'
-        foreach ($r in $rows) { if ($r.ItemId -eq 'OR02-FB') { $r.Level = 'Basic'; $r.Scope = 'All' }; if ($r.ItemId -eq 'OR02-MT') { $r.Include = 'No' }; if ($r.ItemId -eq 'OR03-FB') { $r.Include = 'Yes' } }
+        foreach ($r in $rows) { if ($r.ItemId -eq 'OR02-FB') { $r.Level = 'Basic'; $r.Scope = 'All' }; if ($r.ItemId -eq 'OR02-MT') { $r.Include = 'No' }; if ($r.ItemId -eq 'OR04-FB') { $r.Include = 'Yes' } }
         $rows | Where-Object ItemId -ne 'SP02-01' | Export-Csv $csv -Delimiter ',' -NoTypeInformation   # saved again by Excel with a comma, one row deleted
         $sel = Import-XsmSelection -Path $csv -Snapshot $script:Snap
         $sel.Errors.Count | Should -Be 0
@@ -213,18 +223,19 @@ Describe 'Decisions and Selection.csv' {
         $byId['OR02-FB'].Level | Should -Be 'Basic'; $byId['OR02-FB'].LevelOrigin | Should -Be 'Selection.csv'
         $byId['OR02-MT'].Include | Should -BeFalse
         $byId['SP02-01'].Include | Should -BeFalse
-        $byId['OR03-FB'].Include | Should -BeTrue
-        $byId['OR03-FB'].Warnings -join ' ' | Should -Match 'forced'
+        $byId['OR04-FB'].Include | Should -BeTrue
+        $byId['OR04-FB'].Warnings -join ' ' | Should -Match 'forced'
     }
-    It 'refuses an item that cannot be forced and a row of another collection' {
+    It 'refuses hybrid and on-premises items forced in Selection.csv, and a row of another collection' {
         $csv = Join-Path $script:Work 'Selection2.csv'
         Export-XsmSelection -Items @($script:Snap.Items) -Settings $script:Settings -Path $csv -CollectId $script:Snap.CollectId
         $rows = Import-Csv $csv -Delimiter ';'
-        foreach ($r in $rows) { if ($r.ItemId -eq 'OR01-FB') { $r.Include = 'Yes' } }
+        foreach ($r in $rows) { if ($r.ItemId -in 'OR01-FB', 'OR03-FB', 'AS02-FB') { $r.Include = 'Yes' } }
         $rows | Export-Csv $csv -Delimiter ';' -NoTypeInformation
         $sel = Import-XsmSelection -Path $csv -Snapshot $script:Snap
         $target = New-XsmTargetState -Snapshot $script:Snap -Settings $script:Settings -Selection $sel
-        @($target.Decisions | Where-Object { $_.Item.ItemId -eq 'OR01-FB' })[0].Decision.Problems -join ' ' | Should -Match 'Cannot be migrated'
+        foreach ($id in 'OR01-FB', 'OR03-FB', 'AS02-FB') { @($target.Decisions | Where-Object { $_.Item.ItemId -eq $id })[0].Decision.Problems -join ' ' | Should -Match 'Cannot be migrated' }
+        @($target.Capabilities | Where-Object { @($_.ItemIds) -contains 'OR03-FB' -or @($_.ItemIds) -contains 'OR01-FB' }).Count | Should -Be 0
         foreach ($r in $rows) { $r.CollectId = 'another-run' }
         $rows | Export-Csv $csv -Delimiter ';' -NoTypeInformation
         (Import-XsmSelection -Path $csv -Snapshot $script:Snap).Errors.Count | Should -BeGreaterThan 0

@@ -3,6 +3,14 @@
 All notable changes are listed here. Versions follow MAJOR.MINOR.PATCH (see the guide, Annex E).
 Author: Nicolas Fabert.
 
+## [1.0.1] — 2026-10-01
+
+### Changed
+- **Exchange hybrid and partners on Exchange Server are out of scope, and can no longer be forced.** An item classified **OnPremises** (organization relationship or availability address space whose partner endpoint is not Exchange Online) was overridable in `Selection.csv`; it is now refused, like **Hybrid**. Both are checked before every other reason (a disabled or unused hybrid / on-premises object is still reported as Hybrid / OnPremises), and the item notes give the endpoint host and the reason. The guide says it from the principles on, with a dedicated box in chapter 3 (Exchange hybrid: dedicated hybrid application; partners on Exchange Server: not impacted today according to Microsoft).
+
+### Added
+- Guide chapter 11 — **what the browser shows**: for Free/Busy (`GetSchedule`), MailTips (`GetMailTips`) and calendar sharing (`GetSharingPermissionInfo`, `CreateSharingPermission`), the action to do in Outlook on the web, the request to filter in the developer tools, and what is expected or not, with illustrations rebuilt from lab captures of both directions (in scope, out of scope with error `5016`, `7002` when X-TAP is not used, MailTips out of scope that are silent, share refused with `ErrorNotAllowedExternalSharingByPolicy` while calendar sharing was still rolling out). Annex A has the matching rows.
+- 46 Pester tests.
 ## [1.0.0] — 2026-10-01
 
 First public version.

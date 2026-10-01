@@ -140,7 +140,7 @@ function Write-XsmBanner {
         Title card at the start of an execution:
 
           ╭──────────────────────────────────────────────────────────────────────────────╮
-          │  🤝  X-TAP Sharing Migration                      v1.0.0 · Nicolas Fabert    │
+          │  🤝  X-TAP Sharing Migration                      v1.0.1 · Nicolas Fabert    │
           │     Free/Busy · MailTips · calendar sharing → Microsoft 365 X-TAP            │
           ╰──────────────────────────────────────────────────────────────────────────────╯
              🎯  Mode        Collect

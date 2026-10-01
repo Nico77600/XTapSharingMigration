@@ -2,7 +2,7 @@
 <!--
     X-TAP Sharing Migration - HTML report template
     Author  : Nicolas Fabert
-    Version : 1.0.0
+    Version : 1.0.1
     The tool copies this file and replaces the data marker (in the script element with id "xsm-data",
     near the end of the body) by the report data as JSON. Everything else is static: edit texts,
     colours or columns here, no rebuild needed. No external resource is used: the file works offline,
@@ -347,7 +347,7 @@ if (kind !== "Collect") {
 }
 addPanel("items", kind === "Collect" ? "Migration items" : "Items", items.length, p => {
   const card = el("div", { class: "card" }, el("h2", { text: kind === "Collect" ? "What was found, item by item" : "Decision for each item" }),
-    el("p", { class: "caption", text: kind === "Collect" ? "One item per feature, Exchange object and partner tenant. Items in scope are proposed for migration; out-of-scope items are listed with the reason (hybrid and on-premises are handled elsewhere). The same list is in Selection.csv." : "Decision for each item of the snapshot: Selection.csv, then the Partners and Features rules of the configuration, then what was found in Exchange Online." }));
+    el("p", { class: "caption", text: kind === "Collect" ? "One item per feature, Exchange object and partner tenant. Items in scope are proposed for migration; out-of-scope items are listed with the reason. Exchange hybrid (dedicated hybrid application) and partners on Exchange Server are never migrated and cannot be forced. The same list is in Selection.csv." : "Decision for each item of the snapshot: Selection.csv, then the Partners and Features rules of the configuration, then what was found in Exchange Online." }));
   p.append(card);
   table(card, { rows: items, columns: itemColumns(kind !== "Collect"), filters: itemFilters.filter(f => kind !== "Collect" || f.label !== "Decision"), detailTitle: r => `${r.ItemId} \u00b7 ${featureText(r.Feature)}`, details: itemDetails, placeholder: "Search items, partners, domains..." });
 });

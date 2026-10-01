@@ -22,6 +22,7 @@ Selection.csv             target vs tenant       (Security/Groups admin)  (Excha
 - **One configuration per partner tenant**, whatever the number of relationships and domains. When they give different levels for the same users, **the administrator chooses** (asked once, recorded).
 - **Partner tenant IDs** found from the domains must be **confirmed by the partner** before any trust is created (`PartnersToConfirm.txt`). Availability address spaces (your users read the partner) are listed as **to be configured by the partner**.
 - **Plan / Apply** compare the target with the tenant, show every action, ask for confirmation, apply one phase and **verify** by reading the tenant again. An existing capability scoped by hand is **kept** unless you choose `Merge` or `Replace`.
+- **Out of scope, never configured, cannot be forced**: Exchange **hybrid** with your own on-premises servers (dedicated Exchange hybrid application) and partners on **Exchange Server** (relationship to an on-premises endpoint). They appear in the inventory with the reason, for information.
 - **Never** changes an Exchange Online object, **never** deletes anything. Microsoft Graph **v1.0** only.
 
 ![Plan in the console](docs/images/console-plan.png)

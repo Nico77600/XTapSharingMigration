@@ -1,7 +1,7 @@
 ---
 title: X-TAP Sharing Migration
 subtitle: Administrator guide
-version: 1.0.0
+version: 1.0.1
 author: Nicolas Fabert
 updated: 2026-10-01
 ---
@@ -45,6 +45,7 @@ Microsoft documents the migration step by step ([Migrate to Microsoft 365 Cross-
 | Principle | What it means |
 |---|---|
 | One tenant per run | The tool configures the tenant set in `Tenant.TenantId`. Each partner runs it (or the Microsoft guide) on its own side. |
+| Exchange Online ↔ Exchange Online only | Only sharing between your Exchange Online and **another Microsoft 365 organization**. Exchange **hybrid** (your own on-premises servers) and partners on **Exchange Server** are listed in the inventory for information, **never configured**, and **cannot be forced** (chapter 3). |
 | Inbound only | X-TAP is an **inbound** control: your tenant decides what the partner can see of **your** users. Two-way sharing needs both sides. |
 | Two phases | **Entra** (trust, groups) and **Exchange** (capabilities) can be run by different administrators, on different days. |
 | Read first | `Collect` and `Plan` change nothing. `Apply` shows the changes and asks for confirmation. |
@@ -102,12 +103,20 @@ Each **item** of the inventory is one feature of one Exchange object for one par
 
 ### In scope, out of scope
 
+> [!IMPORTANT]
+> **Two cases are outside this migration, whatever the configuration or `Selection.csv` says:**
+>
+> - **Exchange hybrid** — Free/Busy, MailTips and calendar sharing between **your** Exchange Online and **your** on-premises Exchange servers. They move with the **dedicated Exchange hybrid application**, not with X-TAP.
+> - **Partners on Exchange Server** — an organization relationship (or an availability address space) whose partner endpoint is an on-premises Exchange (`https://mail.partner.com/ews/exchange.asmx`, an on-premises autodiscover …), and the partner's relationship pointing to you. Microsoft lists sharing with an on-premises organization as **not impacted** today (changes announced later in Message Center).
+>
+> The tool reads these objects, shows them as **Hybrid** or **OnPremises** with the reason, and leaves them as they are: no capability, no trust, no cutover command. They are checked **before** everything else — a disabled or unused hybrid / on-premises object is still reported as Hybrid / OnPremises.
+
 | Reason | Meaning | Can be forced in `Selection.csv` |
 |---|---|---|
 | **InScope** | External Microsoft 365 tenant | — |
-| **Hybrid** | Exchange hybrid with your own on-premises organization: relationship `O365 to On-premises - …`, relationship of an on-premises organization, own accepted domain, `InternalProxy` address space. Handled by the **Exchange hybrid application**. | no |
+| **Hybrid** | Exchange hybrid with your own on-premises organization: relationship `O365 to On-premises - …`, relationship of an on-premises organization (`Get-OnPremisesOrganization`), one of your accepted domains, `InternalProxy` address space. **Out of scope** — dedicated Exchange hybrid application. | **no** |
 | **SameTenant** | Domain of this tenant | no |
-| **OnPremises** | The partner endpoint (`TargetSharingEpr`, `TargetAutodiscoverEpr`, `TargetApplicationUri`) is not Exchange Online | yes |
+| **OnPremises** | Partner on Exchange Server: the partner endpoint (`TargetSharingEpr`, `TargetAutodiscoverEpr`, `TargetApplicationUri` of a relationship, `TargetAutodiscoverEpr` / `TargetServiceEpr` of an address space) is not an Exchange Online host (`Collection.Microsoft365Endpoints`). **Out of scope** — not part of this migration. | **no** |
 | **Disabled** | Disabled in Exchange Online | yes |
 | **Unused** | Sharing policy assigned to no mailbox | yes |
 | **TenantNotFound** | No Microsoft Entra tenant for this domain | no |
@@ -115,6 +124,9 @@ Each **item** of the inventory is one feature of one Exchange object for one par
 | **ResolutionError** | The tenant of the domain could not be found (network …) — collect again | no |
 | **NotMigratable** | No X-TAP equivalent: address space other than `OrgWideFBToken`, sharing entry without calendar action | no |
 | **PartnerSide** | Availability address space: your users read the partner's free/busy; the partner configures the X-TAP equivalent for your tenant ID | yes (when the partner must also see your users) |
+
+> [!NOTE]
+> A partner with mailboxes **both** on Exchange Server and in Exchange Online: Microsoft notes that sharing with its **Exchange Online** part is impacted. When your relationship points to its on-premises endpoint, the tool reports it as **OnPremises** and does not migrate it: treat it as a separate case with the partner. A relationship **without** endpoint, whose domains belong to a Microsoft 365 tenant, is in scope, with a note.
 
 > [!NOTE]
 > Other uses of an organization relationship — mailbox moves, archive access, delivery reports, photos — are **not** migrated. The inventory says so on the item, and the cutover commands warn before disabling such a relationship.
@@ -394,7 +406,7 @@ Microsoft rolls out the X-TAP capabilities **feature by feature**: calendar shar
 .\Invoke-XTapSharingMigration.ps1 -Mode Apply -Phase Entra -SelectionPath <same file>
 ```
 
-Rules: a row deleted is not migrated; a row of another collection is refused (collect and select again); `Include = Yes` on an item out of scope works only for the reasons that can be forced, and the plan shows a warning.
+Rules: a row deleted is not migrated; a row of another collection is refused (collect and select again); `Include = Yes` on an item out of scope works only for the reasons that can be forced (**Disabled**, **Unused**, **PartnerSide**), and the plan shows a warning. **Hybrid** and **OnPremises** items are refused (chapter 3).
 
 <!-- icon: chart -->
 ## 10. Reading the reports
@@ -516,35 +528,86 @@ Run each test **from the tenant that reads** the information. Use Outlook on the
 | # | Test | From | Expected |
 |---|---|---|---|
 | T1 | Free/Busy of a user **in** the scope: new event, **Scheduling Assistant**, add the user, look at a known meeting | the partner | Busy times, with subject and location for `LimitedDetails`, without for `Basic` — as in the baseline |
-| T2 | Free/Busy of a user **out** of the scope | the partner | No information (hatched) |
+| T2 | Free/Busy of a user **out** of the scope | the partner | No information: Outlook on the web shows **Unknown** under the attendee |
 | T3 | The same as T1 / T2, the other way round | your tenant | What the partner configured for you |
-| T4 | MailTips: write to a user with an automatic reply (do not send) | the partner | The same MailTips as in the baseline — compare, do not assume what `Limited` shows |
-| T5 | Calendar sharing: share a calendar with a partner user (level of the policy), accept, open it | your tenant, then the partner | The invitation works and shows the expected details; calendars shared before the cutover still open |
+| T4 | MailTips: write to a user **with an automatic reply** (do not send), in and out of the scope | the partner | The same MailTips as in the baseline — compare, do not assume what `Limited` shows. Out of the scope: no tip, and no error |
+| T5 | Calendar sharing: share a calendar with a partner user, accept, open it | your tenant, then the partner | The share dialog offers the agreed level, **Share** succeeds, the partner opens the calendar with the expected details; calendars shared before the cutover still open |
 | T6 | Published calendar (`Anonymous`): open the published URL in a private window | anywhere | The calendar shows the same details as before |
 | T7 | A partner or domain **not** migrated | both | Unchanged |
 
 Outlook on the web shows the service answer. Classic Outlook keeps free/busy and autocomplete in its cache: test it after Outlook on the web, and clear the autocomplete entry when only Outlook fails.
 
-### 7 · Checking Free/Busy in the browser developer tools
+### 7 · What the browser shows — developer tools
 
-When the Scheduling Assistant shows nothing, the request behind it says why. In Microsoft Edge or Google Chrome:
+Outlook on the web shows **what** happens; the request behind it says **why**. Every capture below comes from the lab of 1 October 2026 (one from 10 September), rebuilt as an illustration with the names, domains and IDs replaced: what you see in your own browser has the same fields.
 
 ```steps
 Open | A private window, sign in to Outlook on the web with the test user of the tenant that **reads** (for T1: a user of the partner).
-Developer tools | `F12`, **Network** tab. Tick **Preserve log** and **Disable cache**, clear the list, type `GetSchedule` in the filter.
-Trigger | New event (do not send), **Scheduling Assistant**, add the full SMTP address of the other user. Change the date to call again.
-Find the call | Classic Outlook on the web: `POST …/owa/service.svc?action=GetSchedule`. New Outlook on the web: `POST https://outlook.cloud.microsoft/outlookgatewayb2/graphql`, with `operationName: GetSchedule` in the **Payload** tab — if the filter shows nothing, filter on `graphql`, or search `GetSchedule` with `Ctrl+F` in the Network panel (it searches the bodies too).
-Read the answer | **Response** or **Preview** tab: the attendee's availability, or an error. Note the UTC time and the `request-id` / `client-request-id` headers.
+Developer tools | `F12`, **Network** tab. Tick **Preserve log** and **Disable cache**, select **Fetch/XHR**, clear the list.
+Filter | Type the filter of the table below. If nothing appears, search the word with `Ctrl+F` in the Network panel: it searches the request bodies too.
+Trigger | Do the action of the table, with the **full SMTP address** of the other user. Do not send anything.
+Read | Select the request: **Preview** (or **Response**) for the answer, **Payload** for the question. Note the UTC time and the `request-id` / `client-request-id` response headers.
 ```
 
-| What the response shows | Meaning | Next |
-|---|---|---|
-| The attendee with busy times (`availabilityView`, schedule items), no error | The request is answered | Compare the details with the level expected (T1) |
-| `GetSchedule is not supported for domain: <domain>. 62382`, `responseCode: "7002"` — seen in the lab with `CalculatedRequestType: None` | Exchange Online does not serve this domain through X-TAP for this pair of tenants at the time of the test | Check the rollout in **both** tenants, the capability and its scope in the tenant that holds the mailbox (`Plan` there), the old objects on both sides; wait and test again |
-| A recipient error (`ErrorMailRecipientNotFound` …) | The address is not resolved | Full SMTP address of an existing mailbox |
-| No `GetSchedule` call | The Scheduling Assistant did not ask | Remove and add the attendee again, change the date |
-| Works in Outlook on the web, not in classic Outlook | Client cache | Autocomplete entry, Outlook cache |
+| Feature | Action in Outlook on the web | Filter | Request | Read |
+|---|---|---|---|---|
+| Free/Busy | New event, add the attendee (attendee list or **Scheduling Assistant**) | `GetSchedule` | `POST …/outlookgatewayb2/graphql` — `operationName: GetSchedule` in the payload | `schedules[].error`, `availabilityView`, `scheduleItems[].status` / `subject` / `location` |
+| MailTips | New mail (or new event), add the recipient | `MailTips` | `POST …/owa/service.svc?action=GetMailTips` | `ResponseMessages[].MessageText` — an XML string: look for `<t:OutOfOffice>` |
+| Calendar sharing | Calendar, **Share**, type the address; then **Share** | `Sharing` | `service.svc?action=GetSharingPermissionInfo` (address typed), `…CreateSharingPermission` (**Share** clicked) | `IsSharingAllowed`, `AllowedDetailLevels`; `ResponseCode` |
 
+> [!TIP]
+> For the `service.svc` calls, the question is not in the request body: it is in the `x-owa-urlpostdata` request header (**Headers** tab), URL-encoded JSON. Copy it and decode it to see the recipients and the level asked.
+
+#### Free/Busy
+
+![Outlook on the web: the attendee in scope is Available, the attendee out of scope is Unknown](images/owa-freebusy.png)
+
+![Expected: free/busy of a partner user in scope, level Basic — busy time without subject or location](images/devtools-freebusy-ok.png)
+
+![One attendee in scope, one out of scope: error 5016, cross-tenant access denied](images/devtools-freebusy-scope.png)
+
+![Not expected after the cutover: GetSchedule is not supported for domain, 7002](images/devtools-freebusy-7002.png)
+
+| What the response shows | Expected? | Meaning | Next |
+|---|---|---|---|
+| `error: null`, `availabilityView` made of digits, `scheduleItems` with `status: Busy` and **empty** `subject` / `location` | ✔ for **Basic** | Free/busy returned, time only | — |
+| The same with `subject` and `location` **filled** | ✔ for **LimitedDetails** — ✖ if Basic was agreed | More details than agreed | Level of the capability in the tenant that **holds** the mailbox; an old relationship still enabled with `LimitedDetails` |
+| `error.responseCode: "5016"`, message `Cross-tenant access denied: the user or group restrictions in the cross-tenant policy could not be evaluated`, `availabilityView: ""` — Outlook on the web shows **Unknown** | ✔ for a user **out** of the scope — ✖ for a user who should be in it | The capability exists, the user is not in its scope | Membership of the scope group (a dynamic group needs time), scope of the capability (`Plan` in the tenant that holds the mailbox) |
+| `error.responseCode: "7002"`, `GetSchedule is not supported for domain: <domain>. 62382`, `diagnosticData` with `CalculatedRequestType:None` | ✖ after the cutover | Exchange Online does not serve this domain through X-TAP for this pair of tenants | Rollout in **both** tenants, the capability in the tenant that holds the mailbox, the old objects on both sides; wait and test again |
+| A recipient error (`ErrorMailRecipientNotFound` …) | ✖ | The address is not resolved | Full SMTP address of an existing mailbox |
+| No `GetSchedule` call | — | Outlook on the web did not ask | Remove and add the attendee again, change the date |
+
+#### MailTips
+
+![Outlook on the web: the automatic reply of the partner user is shown when writing to them](images/owa-mailtips.png)
+
+![Expected: the MailTips of a partner user in scope contain the automatic reply](images/devtools-mailtips-ok.png)
+
+![Out of scope: the call succeeds but returns no automatic reply, although the user has one](images/devtools-mailtips-scope.png)
+
+| What the response shows | Expected? | Meaning | Next |
+|---|---|---|---|
+| `ResponseCode: NoError`, `MessageText` with `<t:OutOfOffice>` and the text of the automatic reply — Outlook on the web shows *Automatic reply: …* | ✔ for a user in scope with an automatic reply (observed with `crossTenantMailTipsLimited`) | MailTips returned | — |
+| `ResponseCode: NoError`, **no** `<t:OutOfOffice>`, although the user **has** an automatic reply | ✔ for a user **out** of the scope — ✖ for a user who should be in it | MailTips out of scope are **silent**: no error, no tip | Scope of `crossTenantMailTips…` in the tenant that holds the mailbox, group membership |
+| `ResponseCode: NoError`, no `<t:OutOfOffice>`, user **without** automatic reply | — | Nothing to show | Turn on an automatic reply on the test user first |
+
+> [!IMPORTANT]
+> Because MailTips out of scope look exactly like "no automatic reply", always test MailTips with a user whose automatic reply is **on**, and compare with the baseline taken before the cutover.
+
+#### Calendar sharing
+
+![Share dialog: the recipient check returns the levels allowed for this external recipient](images/devtools-sharing-info.png)
+
+![The share itself: refused by policy, compared with a share created](images/devtools-sharing-create.png)
+
+| What the response shows | Expected? | Meaning | Next |
+|---|---|---|---|
+| `GetSharingPermissionInfo`: `IsSharingAllowed: true`, `AllowedDetailLevels` | ✔ | The levels the dialog offers for this recipient: `AvailabilityOnly` = Simple, `LimitedDetails` = Detail, `FullDetails` = Reviewer | Compare with the level of the capability |
+| `IsSharingAllowed: false`, or no external level offered | ✖ if sharing is expected | Sharing with this recipient is not allowed | Capability `crossTenantCalendarSharing…` (partner or default policy), the old sharing policy |
+| `CreateSharingPermission`: `ResponseCode: NoError`, a `SharingPermissionId` | ✔ | Share created, invitation sent | The partner accepts it and opens the calendar (T5) |
+| `CreateSharingPermission`: `ErrorNotAllowedExternalSharingByPolicy` — *Policy does not allow granting of permissions to external users* — Outlook on the web says that the sharing invitation could not be sent | ✖ | The share is refused | See below |
+
+In the lab, on 1 October 2026, the tenant had its sharing policy **disabled** and X-TAP allowing `crossTenantCalendarSharingFreeBusySimple` for all users, while calendar sharing through X-TAP was still rolling out (completion announced for 15 October 2026): the dialog offered *Can view when I'm busy*, and the share was **refused** with `ErrorNotAllowedExternalSharingByPolicy`. The other tenant, still on its sharing policy, created the share normally. This is why calendar sharing must not be cut over before the rollout has reached **both** tenants — `-Feature` keeps it out of the migration until then (chapter 8).
 > [!TIP]
 > To tell a **scope** problem from a **path** problem, the tenant that holds the mailboxes can temporarily allow the capability for **All** users (a `Partners` rule such as `FreeBusy = @{ Scope = 'All' }`, with `Apply.ExistingCapability = 'Replace'`): if the free/busy appears, the path works and the group is the cause. Then come back to the group.
 
@@ -610,7 +673,7 @@ Console style: emoji in Windows Terminal and VS Code, console-font symbols elsew
 ## 14. Testing a change
 
 ```powershell
-Invoke-Pester -Path .\tests -Output Detailed     # 45 tests, no connection to Microsoft 365
+Invoke-Pester -Path .\tests -Output Detailed     # 46 tests, no connection to Microsoft 365
 .\tests\New-DemoReports.ps1                      # the three reports from the simulated tenant
 ```
 
@@ -637,6 +700,9 @@ The tests use a fictitious tenant (`tests\TestData.ps1`: Contoso and its partner
 | "Microsoft 365 collaboration is blocked in the default cross-tenant access policy" | Service default when the default policy was never configured. Partners with their own trust are not affected. The tool never changes the default trust. |
 | Free/Busy grey after the cutover | Allow time for caches; check that the target user has a licensed Exchange Online mailbox and is in the scope group; test with the full SMTP address. Then look at the `GetSchedule` call in the browser developer tools (chapter 11). |
 | `GetSchedule is not supported for domain … 62382`, `responseCode 7002` | Exchange Online does not serve this domain through X-TAP for this pair of tenants at the time of the test. Check the rollout in both tenants, the capability and its scope in the tenant that holds the mailbox, the old objects on both sides; wait and test again (chapter 11). |
+| Free/Busy **Unknown**, `responseCode 5016`, *Cross-tenant access denied* | The user is not in the scope of the capability: scope group, its members (chapter 11, developer tools). |
+| MailTips: no automatic reply shown, no error | MailTips out of scope are silent: check the scope with a user whose automatic reply is on (chapter 11). |
+| Calendar share: `ErrorNotAllowedExternalSharingByPolicy` | The share is refused: calendar sharing not yet available through X-TAP in this tenant (rollout), or neither the capability nor the sharing policy allows it (chapter 11). |
 
 <!-- icon: link -->
 ## Annex B — Microsoft Graph calls
