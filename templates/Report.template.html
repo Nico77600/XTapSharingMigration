@@ -1,0 +1,528 @@
+<!doctype html>
+<!--
+    X-TAP Sharing Migration - HTML report template
+    Author  : Nicolas Fabert
+    Version : 1.0.0
+    The tool copies this file and replaces the data marker (in the script element with id "xsm-data",
+    near the end of the body) by the report data as JSON. Everything else is static: edit texts,
+    colours or columns here, no rebuild needed. No external resource is used: the file works offline,
+    from a mail attachment or from a OneDrive / SharePoint preview.
+-->
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>X-TAP Sharing Migration | Report</title>
+<script>
+  (() => {
+    let theme = null;
+    try { theme = localStorage.getItem("xsm-theme"); } catch (e) { }
+    const param = new URLSearchParams(window.location.search).get("scoutTheme");
+    if (param === "light" || param === "dark") theme = param;
+    if (theme !== "light" && theme !== "dark") theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    document.documentElement.setAttribute("data-theme", theme);
+  })();
+</script>
+<style>
+:root {
+  color-scheme: light;
+  --cp-bg: #f7f4ef; --cp-bg-elevated: #fcfbf8; --cp-surface: #ffffff; --cp-surface-soft: #f5f5f5;
+  --cp-border: #dedede; --cp-border-strong: #919191; --cp-text: #242424; --cp-text-muted: #5c5c5c; --cp-text-soft: #6f6f6f;
+  --cp-accent: #b11f4b; --cp-accent-hover: #9a1a41; --cp-accent-soft: rgba(177, 31, 75, 0.08); --cp-accent-fg: #ffffff;
+  --cp-success: #16a34a; --cp-danger: #dc2626; --cp-warning: #b45309; --cp-link: #0078d4; --cp-info: #2563eb;
+  --cp-success-soft: rgba(22, 163, 74, 0.12); --cp-danger-soft: rgba(220, 38, 38, 0.12); --cp-warning-soft: rgba(245, 158, 11, 0.16); --cp-info-soft: rgba(37, 99, 235, 0.10);
+  --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.12); --cp-highlight: rgba(177, 31, 75, 0.12); --cp-code: #f3f1ed;
+}
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --cp-bg: #3d3b3a; --cp-bg-elevated: #343231; --cp-surface: #292929; --cp-surface-soft: #2e2e2e;
+  --cp-border: #474747; --cp-border-strong: #5f5f5f; --cp-text: #dedede; --cp-text-muted: #a5a5a5; --cp-text-soft: #b0b0b0;
+  --cp-accent: #fd8ea1; --cp-accent-hover: #fb7b91; --cp-accent-soft: rgba(253, 142, 161, 0.14); --cp-accent-fg: #1a1a1a;
+  --cp-success: #4ade80; --cp-danger: #f87171; --cp-warning: #fbbf24; --cp-link: #4da6ff; --cp-info: #7aa7ff;
+  --cp-success-soft: rgba(74, 222, 128, 0.14); --cp-danger-soft: rgba(248, 113, 113, 0.16); --cp-warning-soft: rgba(251, 191, 36, 0.16); --cp-info-soft: rgba(122, 167, 255, 0.14);
+  --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.32); --cp-highlight: rgba(253, 142, 161, 0.12); --cp-code: #222120;
+}
+* { box-sizing: border-box; }
+body { margin:0; padding:28px 32px; background:var(--cp-bg); color:var(--cp-text); font:14px "Segoe UI", Aptos, Calibri, -apple-system, BlinkMacSystemFont, sans-serif; }
+h1 { font-size:32px; font-weight:650; letter-spacing:-0.025em; margin:8px 0 10px; }
+h2 { font-size:18px; font-weight:600; margin:0 0 6px; }
+h3 { font-size:15px; font-weight:600; margin:18px 0 8px; }
+p { line-height:1.55; margin:8px 0; } .muted, small { color:var(--cp-text-muted); }
+a { color:var(--cp-link); }
+code, .mono { font-family:Consolas, "Cascadia Mono", monospace; font-size:12px; }
+header { position:relative; overflow:hidden; border:1px solid var(--cp-border); border-top:4px solid var(--cp-accent); border-radius:16px; padding:24px; margin-bottom:16px; background:linear-gradient(125deg,var(--cp-surface) 35%,var(--cp-accent-soft)); }
+header::before { content:""; position:absolute; width:280px; height:280px; right:-100px; top:-160px; border:40px solid var(--cp-highlight); border-radius:50%; pointer-events:none; }
+.hero-top { position:relative; display:flex; justify-content:space-between; gap:24px; align-items:flex-start; flex-wrap:wrap; }
+.origin { color:var(--cp-accent); font-size:11px; letter-spacing:0.1em; text-transform:uppercase; font-weight:700; }
+.subtitle { color:var(--cp-text-muted); max-width:720px; }
+.run { min-width:300px; padding:12px 16px; border:1px solid var(--cp-border); border-radius:0.625rem; background:var(--cp-surface); position:relative; }
+.label { font-size:11px; color:var(--cp-accent); font-weight:700; letter-spacing:0.08em; text-transform:uppercase; display:block; margin-bottom:8px; }
+.run dl { display:grid; grid-template-columns:auto 1fr; gap:4px 14px; margin:0; font-size:12.5px; }
+.run dt { color:var(--cp-text-muted); } .run dd { margin:0; word-break:break-all; }
+.metrics { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; margin:20px 0 4px; position:relative; }
+.tile { position:relative; overflow:hidden; padding:18px 20px; border:1px solid var(--cp-border); border-radius:16px; background:var(--cp-surface); transition:transform 160ms ease,border-color 160ms ease; }
+.tile:hover { transform:translateY(-3px); border-color:var(--cp-accent); }
+.tile::after { content:""; position:absolute; width:80px; height:80px; right:-28px; bottom:-32px; border:14px solid var(--cp-highlight); border-radius:50%; pointer-events:none; }
+.tile-primary { background:linear-gradient(125deg,var(--cp-accent-hover),var(--cp-accent)); border-color:var(--cp-accent); color:var(--cp-accent-fg); }
+.tile-tinted { background:linear-gradient(135deg,var(--cp-surface),var(--cp-accent-soft)); }
+.tile-label { display:block; font-size:12px; font-weight:600; margin-bottom:12px; }
+.tile strong { display:block; font-size:32px; font-weight:650; letter-spacing:-0.025em; font-variant-numeric:tabular-nums; }
+.tile small { display:block; margin-top:8px; font-size:11px; } .tile-primary small { color:var(--cp-accent-fg); }
+.callouts { display:grid; gap:10px; margin:0 0 16px; }
+.callout { border:1px solid var(--cp-border); border-left:4px solid var(--cp-info); border-radius:10px; padding:10px 14px; background:var(--cp-surface); }
+.callout.warn { border-left-color:var(--cp-warning); } .callout.bad { border-left-color:var(--cp-danger); } .callout.ok { border-left-color:var(--cp-success); }
+.callout strong { display:block; margin-bottom:2px; }
+.callout ul { margin:4px 0 0; padding-left:18px; } .callout li { margin:2px 0; }
+nav.tabs { position:sticky; top:0; z-index:5; display:flex; gap:6px; flex-wrap:wrap; padding:10px; margin:0 0 16px; border:1px solid var(--cp-border); border-radius:14px; background:var(--cp-bg-elevated); box-shadow:0 6px 18px rgba(0,0,0,0.04); }
+nav.tabs button { border:1px solid transparent; background:transparent; padding:7px 14px; border-radius:999px; font:inherit; color:var(--cp-text); cursor:pointer; }
+nav.tabs button .count { display:inline-block; min-width:20px; margin-left:6px; padding:0 6px; border-radius:999px; background:var(--cp-accent-soft); font-size:11px; text-align:center; }
+nav.tabs button[aria-selected="true"] { background:var(--cp-accent); color:var(--cp-accent-fg); }
+nav.tabs button[aria-selected="true"] .count { background:rgba(255,255,255,0.25); }
+nav.tabs .spacer { flex:1; }
+nav.tabs .tool { border:1px solid var(--cp-border); }
+section.panel { display:none; } section.panel.active { display:block; }
+.card { background:var(--cp-surface); border:1px solid var(--cp-border); border-radius:16px; padding:20px; margin-bottom:16px; }
+.card > p.caption { margin-top:0; color:var(--cp-text-muted); font-size:13px; }
+.toolbar { display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; margin:10px 0 12px; }
+.toolbar input[type="search"] { min-width:260px; flex:1 1 260px; max-width:420px; }
+input, button, select { font:inherit; color:var(--cp-text); background:var(--cp-surface); border:1px solid var(--cp-border); padding:6px 10px; border-radius:0.625rem; }
+button { cursor:pointer; } button:hover { color:var(--cp-accent); border-color:var(--cp-accent); }
+:focus-visible { outline:2px solid var(--cp-accent); outline-offset:2px; }
+.result-count { color:var(--cp-text-muted); font-size:12px; font-variant-numeric:tabular-nums; }
+.table-wrap { overflow:auto; border:1px solid var(--cp-border); border-radius:0.625rem; max-height:70vh; }
+table { width:100%; border-collapse:collapse; font-size:13px; }
+thead th { position:sticky; top:0; z-index:1; background:var(--cp-surface-soft); text-align:left; font-weight:600; font-size:12px; padding:9px 10px; border-bottom:1px solid var(--cp-border); white-space:nowrap; cursor:pointer; user-select:none; }
+thead th[data-sort="asc"]::after { content:" \2191"; } thead th[data-sort="desc"]::after { content:" \2193"; }
+tbody td { padding:8px 10px; border-bottom:1px solid var(--cp-border); vertical-align:top; }
+tbody tr { cursor:pointer; } tbody tr:hover { background:var(--cp-accent-soft); }
+tbody tr:last-child td { border-bottom:0; }
+td.wrap { white-space:normal; min-width:220px; } td.nowrap { white-space:nowrap; }
+.empty { padding:22px; text-align:center; color:var(--cp-text-muted); }
+.pill { display:inline-block; padding:1px 9px; border-radius:999px; font-size:12px; font-weight:600; white-space:nowrap; border:1px solid transparent; }
+.pill.ok { background:var(--cp-success-soft); color:var(--cp-success); }
+.pill.warn { background:var(--cp-warning-soft); color:var(--cp-warning); }
+.pill.bad { background:var(--cp-danger-soft); color:var(--cp-danger); }
+.pill.info { background:var(--cp-info-soft); color:var(--cp-info); }
+.pill.accent { background:var(--cp-accent-soft); color:var(--cp-accent); }
+.pill.muted { background:var(--cp-surface-soft); color:var(--cp-text-muted); border-color:var(--cp-border); }
+.chips { display:flex; flex-wrap:wrap; gap:4px; }
+.chip { display:inline-block; padding:1px 8px; border-radius:6px; background:var(--cp-surface-soft); border:1px solid var(--cp-border); font-size:12px; }
+.note { display:block; color:var(--cp-text-muted); font-size:12px; margin-top:3px; }
+.grid2 { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+.steps { list-style:none; margin:0; padding:0; counter-reset:step; }
+.steps li { position:relative; padding:12px 14px 12px 54px; border:1px solid var(--cp-border); border-radius:12px; margin-bottom:10px; background:var(--cp-surface); }
+.steps li::before { counter-increment:step; content:counter(step); position:absolute; left:14px; top:12px; width:26px; height:26px; border-radius:50%; background:var(--cp-accent); color:var(--cp-accent-fg); font-weight:700; display:flex; align-items:center; justify-content:center; font-size:13px; }
+.steps .who { float:right; }
+pre.code { position:relative; margin:8px 0; padding:12px 14px; background:var(--cp-code); border:1px solid var(--cp-border); border-radius:10px; overflow:auto; font:12.5px/1.5 Consolas, "Cascadia Mono", monospace; white-space:pre; }
+pre.code button.copy { position:absolute; top:6px; right:6px; font-size:11px; padding:2px 8px; opacity:0.85; }
+.cut { border:1px solid var(--cp-border); border-radius:14px; padding:14px 16px; margin-bottom:12px; background:var(--cp-surface); }
+.cut h3 { margin:0 0 6px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+.cut .label { margin:10px 0 0; }
+dialog { border:1px solid var(--cp-border); border-radius:16px; padding:0; background:var(--cp-surface); color:var(--cp-text); width:min(920px,94vw); box-shadow:var(--cp-shadow); }
+dialog::backdrop { background:rgba(0,0,0,0.35); }
+.dialog-head { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:14px 20px; border-bottom:1px solid var(--cp-border); }
+.dialog-body { padding:16px 20px; max-height:72vh; overflow:auto; }
+.dialog-body dl { display:grid; grid-template-columns:190px 1fr; gap:7px 16px; margin:0; }
+.dialog-body dt { color:var(--cp-text-muted); } .dialog-body dd { margin:0; word-break:break-word; }
+footer { color:var(--cp-text-muted); font-size:12px; line-height:1.6; margin-top:24px; }
+@media (max-width: 1000px) { .metrics, .grid2 { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media (max-width: 640px) { body { padding:14px; } .metrics, .grid2 { grid-template-columns:1fr; } }
+@media print {
+  body { background:#fff; padding:0; } nav.tabs, .toolbar, button.copy { display:none !important; }
+  section.panel { display:block !important; break-before:page; } .table-wrap { max-height:none; overflow:visible; }
+  header, .card, .tile { box-shadow:none; }
+}
+</style></head><body>
+<header>
+  <div class="hero-top">
+    <div>
+      <span class="origin" id="origin">Microsoft 365 X-TAP &middot; Exchange Online</span>
+      <h1 id="title">Report</h1>
+      <p class="subtitle" id="subtitle"></p>
+    </div>
+    <div class="run"><span class="label">This run</span><dl id="run"></dl></div>
+  </div>
+  <div class="metrics" id="metrics"></div>
+</header>
+<div class="callouts" id="callouts"></div>
+<nav class="tabs" id="tabs" aria-label="Report sections"></nav>
+<main id="panels"></main>
+<dialog id="detail" aria-labelledby="detail-title">
+  <div class="dialog-head"><h2 id="detail-title">Details</h2><button type="button" id="detail-close" aria-label="Close">Close</button></div>
+  <div class="dialog-body" id="detail-body"></div>
+</dialog>
+<footer id="footer"></footer>
+<script type="application/json" id="xsm-data">/*XSM_DATA*/null</script>
+<script>
+"use strict";
+const DATA = JSON.parse(document.getElementById("xsm-data").textContent || "null") || {};
+const $ = (s, r = document) => r.querySelector(s);
+const el = (tag, attrs = {}, ...children) => {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v === null || v === undefined || v === false) continue;
+    if (k === "class") e.className = v; else if (k === "text") e.textContent = v; else if (k === "html") e.innerHTML = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v === true ? "" : v);
+  }
+  for (const c of children.flat()) { if (c === null || c === undefined || c === false) continue; e.append(c instanceof Node ? c : document.createTextNode(String(c))); }
+  return e;
+};
+const arr = v => Array.isArray(v) ? v : (v === null || v === undefined || v === "" ? [] : [v]);
+const tz = DATA.TimeZone || "UTC";
+const fmtDate = iso => {
+  if (!iso) return "-";
+  const d = new Date(iso); if (isNaN(d)) return String(iso);
+  try { return new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: tz }).format(d) + " (" + tz + ")"; }
+  catch (e) { return d.toISOString(); }
+};
+const pill = (text, cls) => el("span", { class: "pill " + (cls || "muted"), text });
+const FEATURES = { FreeBusy: "Free/Busy", MailTips: "MailTips", CalendarSharing: "Calendar sharing", AnonymousCalendarSharing: "Anonymous publishing" };
+const SOURCES = { OrganizationRelationship: "Organization relationship", SharingPolicy: "Sharing policy", AvailabilityAddressSpace: "Availability address space" };
+const REASON_CLS = { InScope: "ok", Hybrid: "accent", OnPremises: "warn", Disabled: "muted", Unused: "muted", SameTenant: "muted", TenantNotFound: "bad", Consumer: "muted", ResolutionError: "bad", NotMigratable: "muted", NoSharing: "muted", PartnerSide: "info" };
+const XTAP = { Present: ["Already in X-TAP", "ok"], PresentOtherScope: ["In X-TAP, other scope", "warn"], OtherLevel: ["Other level in X-TAP", "warn"], Missing: ["Not in X-TAP yet", "info"], Unknown: ["X-TAP not read", "muted"], NotApplicable: ["-", "muted"] };
+const OPS = { Create: ["Create", "info"], Update: ["Update", "warn"], AddMembers: ["Add members", "info"], Disable: ["Disable", "warn"], NoChange: ["No change", "muted"], Blocked: ["Blocked", "bad"], Conflict: ["Conflict", "bad"] };
+const STATUS = { ToDo: ["To do", "info"], Done: ["Done", "ok"], Failed: ["Failed", "bad"], Skipped: ["Skipped", "warn"], OtherPhase: ["Other phase", "muted"], NoChange: ["In place", "ok"], Blocked: ["Blocked", "bad"], Conflict: ["Conflict", "bad"] };
+const TRUST = { AllowedAllUsers: ["Allowed, all users", "ok"], AllowedSome: ["Allowed, some users", "warn"], Blocked: ["Blocked", "bad"], NotConfigured: ["Not configured", "muted"] };
+const statusPill = (map, key) => { const v = map[key] || [key || "-", "muted"]; return pill(v[0], v[1]); };
+const featureText = f => FEATURES[f] || f || "-";
+const items = arr(DATA.Items);
+const actions = arr(DATA.Actions);
+const kind = DATA.Kind || "Collect";
+
+/* ---------- Generic table: search, filters, sort, details ---------- */
+function table(container, opts) {
+  const cols = opts.columns; let rows = arr(opts.rows);
+  const state = { q: "", filters: {}, sort: null, dir: 1 };
+  const bar = el("div", { class: "toolbar" });
+  const count = el("span", { class: "result-count" });
+  if (opts.search !== false) bar.append(el("input", { type: "search", placeholder: opts.placeholder || "Search...", "aria-label": "Search", oninput: e => { state.q = e.target.value.toLowerCase(); draw(); } }));
+  for (const f of arr(opts.filters)) {
+    const values = [...new Set(rows.map(r => String(f.value(r) ?? "")).filter(Boolean))].sort();
+    if (values.length < 2) continue;
+    const sel = el("select", { "aria-label": f.label, onchange: e => { state.filters[f.label] = e.target.value; draw(); } }, el("option", { value: "", text: f.label + ": all" }), values.map(v => el("option", { value: v, text: (f.text ? f.text(v) : v) })));
+    bar.append(sel);
+  }
+  bar.append(count);
+  const thead = el("tr", {}, cols.map((c, i) => el("th", { scope: "col", onclick: () => { state.dir = state.sort === i ? -state.dir : 1; state.sort = i; draw(); } }, c.label)));
+  const tbody = el("tbody");
+  const wrap = el("div", { class: "table-wrap" }, el("table", {}, el("thead", {}, thead), tbody));
+  container.append(bar, wrap);
+  function text(r) { return cols.map(c => String(c.sortValue ? c.sortValue(r) : (c.value ? c.value(r) : r[c.key]) ?? "")).join(" ").toLowerCase(); }
+  function draw() {
+    let view = rows.filter(r => (!state.q || text(r).includes(state.q)) && arr(opts.filters).every(f => !state.filters[f.label] || String(f.value(r) ?? "") === state.filters[f.label]));
+    if (state.sort !== null) {
+      const c = cols[state.sort]; const key = r => String(c.sortValue ? c.sortValue(r) : (c.value ? c.value(r) : r[c.key]) ?? "");
+      view = view.slice().sort((a, b) => key(a).localeCompare(key(b), undefined, { numeric: true }) * state.dir);
+    }
+    [...thead.children].forEach((th, i) => th.toggleAttribute("data-sort", false) || (state.sort === i && th.setAttribute("data-sort", state.dir > 0 ? "asc" : "desc")));
+    tbody.replaceChildren();
+    if (!view.length) tbody.append(el("tr", {}, el("td", { colspan: cols.length, class: "empty", text: opts.empty || "Nothing to show." })));
+    for (const r of view) {
+      tbody.append(el("tr", { onclick: () => opts.details && showDetails(opts.detailTitle ? opts.detailTitle(r) : "Details", opts.details(r)) },
+        cols.map(c => { const v = c.render ? c.render(r) : (c.value ? c.value(r) : r[c.key]); return el("td", { class: c.cls || "" }, v instanceof Node ? v : (v === null || v === undefined || v === "" ? "-" : String(v))); })));
+    }
+    count.textContent = view.length === rows.length ? `${rows.length} row(s)` : `${view.length} of ${rows.length} row(s)`;
+  }
+  draw();
+}
+function showDetails(title, pairs) {
+  $("#detail-title").textContent = title;
+  const dl = el("dl");
+  for (const [k, v] of pairs) { if (v === undefined) continue; dl.append(el("dt", { text: k }), el("dd", {}, v instanceof Node ? v : (v === null || v === "" ? "-" : String(v)))); }
+  $("#detail-body").replaceChildren(dl);
+  $("#detail").showModal();
+}
+$("#detail-close").addEventListener("click", () => $("#detail").close());
+$("#detail").addEventListener("click", e => { if (e.target === $("#detail")) $("#detail").close(); });
+const list = (values, cls) => { const v = arr(values).filter(Boolean); return v.length ? el("div", { class: "chips" }, v.map(x => el("span", { class: cls || "chip", text: x }))) : "-"; };
+const notes = values => { const v = arr(values).filter(Boolean); return v.length ? el("ul", { style: "margin:0;padding-left:18px" }, v.map(x => el("li", { text: x }))) : "-"; };
+function code(lines) {
+  const text = arr(lines).join("\n");
+  const pre = el("pre", { class: "code" }, el("code", { text }));
+  pre.prepend(el("button", { type: "button", class: "copy", text: "Copy", onclick: e => { e.stopPropagation(); navigator.clipboard && navigator.clipboard.writeText(text).then(() => { e.target.textContent = "Copied"; setTimeout(() => e.target.textContent = "Copy", 1500); }); } }));
+  return pre;
+}
+
+/* ---------- Header ---------- */
+const t = DATA.Tenant || {};
+const titles = { Collect: "Inventory", Plan: "Plan", Apply: "Result" };
+const subtitles = {
+  Collect: "What Exchange Online shares today with other organizations (Free/Busy, MailTips, calendar sharing), classified for Microsoft 365 X-TAP. Read-only: nothing was changed.",
+  Plan: "What the tool would configure in Microsoft 365 X-TAP, compared with the tenant now. Nothing was changed.",
+  Apply: "What the tool configured in Microsoft 365 X-TAP, verified by reading the tenant again. Exchange Online objects were not changed: the cutover stays manual."
+};
+document.title = `X-TAP Sharing Migration | ${titles[kind] || kind} | ${t.Organization || t.TenantId || ""}`;
+$("#title").textContent = `${titles[kind] || kind}${DATA.Phase && kind === "Apply" ? " \u00b7 phase " + DATA.Phase : (DATA.Phase && kind === "Plan" ? " \u00b7 " + (DATA.Phase === "All" ? "both phases" : "phase " + DATA.Phase) : "")}`;
+$("#subtitle").textContent = `${t.DisplayName ? t.DisplayName + " \u00b7 " : ""}${t.Organization || ""} \u2014 ${subtitles[kind] || ""}`;
+const runRows = [["Generated", fmtDate(DATA.GeneratedAt)], ["Tenant ID", t.TenantId], ["Snapshot", `${DATA.CollectId || "-"} (${fmtDate(DATA.CollectedAt)})`]];
+for (const [k, v] of Object.entries(DATA.Accounts || {})) if (v) runRows.push([k, v]);
+if (DATA.SelectionPath !== undefined) runRows.push(["Selection", DATA.SelectionPath || "none \u2014 every proposed item"]);
+const runFeatures = arr(DATA.Settings && DATA.Settings.RunFeatures);
+if (kind !== "Collect") runRows.push(["Features", runFeatures.length ? runFeatures.map(featureText).join(", ") + " only (-Feature)" : "all allowed by the configuration"]);
+$("#run").append(...runRows.flatMap(([k, v]) => [el("dt", { text: k }), el("dd", { text: v || "-" })]));
+$("#metrics").append(...arr(DATA.Metrics).map((m, i) => el("article", { class: "tile" + (i === 0 ? " tile-primary" : (i < 3 ? " tile-tinted" : "")) }, el("span", { class: "tile-label", text: m.Label }), el("strong", { text: m.Value }), el("small", { text: m.Hint || "" }))));
+
+/* ---------- Callouts ---------- */
+const callouts = $("#callouts");
+const addCallout = (cls, title, lines) => { const l = arr(lines).filter(Boolean); if (!l.length && !title) return; callouts.append(el("div", { class: "callout " + cls }, el("strong", { text: title }), l.length ? el("ul", {}, l.map(x => el("li", { text: x }))) : null)); };
+if (DATA.Errors && arr(DATA.Errors).length) addCallout("bad", "Errors", DATA.Errors);
+if (arr(DATA.Conflicts).length) addCallout("warn", "Choices to make", arr(DATA.Conflicts).map(c => `${c.PartnerName} \u2014 ${featureText(c.Feature)}: ${arr(c.Options).map(o => `${o.Level} (${arr(o.Sources).join(", ")})`).join(" / ")}. Plan and Apply ask which level to keep (recorded in LevelChoices.json).`));
+if (DATA.Warnings && arr(DATA.Warnings).filter(w => !String(w).startsWith("Choice needed")).length) addCallout("warn", "Warnings", arr(DATA.Warnings).filter(w => !String(w).startsWith("Choice needed")));
+if (kind === "Collect") addCallout("ok", "Read-only inventory", ["This report is the picture of the configuration found. The tool changed nothing in Exchange Online or Microsoft Entra.", "Next: review the items, adjust the configuration file or Selection.csv if needed, then run the plan (see the Next steps tab)."]);
+if (runFeatures.length && kind !== "Collect") addCallout("info", "Part of the features only", [`This run migrates ${runFeatures.map(featureText).join(", ")} only (-Feature). The other items are listed but not configured; an organization relationship whose other features are not migrated must not be cut over yet (see the warnings of the Manual cutover tab).`]);
+if (kind === "Apply") addCallout("warn", "Cutover not done", ["Organization relationships, availability address spaces and sharing policies still take precedence over Microsoft 365 X-TAP. The cutover is manual and coordinated with each partner: see the Manual cutover tab, and the guide, chapter 11 (after the script) for the partner contact, the change window, the tests and the browser developer tools checks."]);
+
+/* ---------- Panels ---------- */
+const tabs = $("#tabs"), panels = $("#panels");
+const sections = [];
+function addPanel(id, title, count, build) { sections.push({ id, title, count, build }); }
+function activate(id) {
+  for (const s of sections) { $("#tab-" + s.id).setAttribute("aria-selected", String(s.id === id)); $("#panel-" + s.id).classList.toggle("active", s.id === id); }
+  try { history.replaceState(null, "", "#" + id); } catch (e) { }
+}
+
+/* Items (classification + decision) */
+const itemColumns = (withDecision) => [
+  { label: "Item", key: "ItemId", cls: "nowrap mono" },
+  withDecision ? { label: "Decision", render: r => r.Include ? pill("Migrated", "ok") : pill("Not migrated", "muted"), sortValue: r => r.Include ? "1" : "0" } : { label: "Assessment", render: r => r.Status === "InScope" ? pill("In scope", "ok") : pill("Out of scope", "muted"), sortValue: r => r.Status },
+  { label: "Feature", value: r => featureText(r.Feature), cls: "nowrap" },
+  { label: "Partner", render: r => el("div", {}, r.PartnerName || "-", el("span", { class: "note mono", text: r.PartnerTenantId || arr(r.PartnerDomains).join(" ") })), sortValue: r => r.PartnerName },
+  { label: "Exchange source", render: r => el("div", {}, SOURCES[r.Source] || r.Source, el("span", { class: "note", text: r.SourceName })), sortValue: r => r.Source + r.SourceName },
+  { label: "Found in Exchange", value: r => r.ExchangeSetting, cls: "wrap" },
+  withDecision ? { label: "Level \u00b7 scope", render: r => r.Include ? el("div", {}, r.Level || "-", el("span", { class: "note", text: r.Scope || "" })) : "-", sortValue: r => r.Level } : { label: "Proposed", render: r => el("div", {}, r.Include ? (r.Level || "-") : pill("Not migrated", "muted"), el("span", { class: "note", text: r.Include ? r.Scope || "" : "" })), sortValue: r => r.Level },
+  { label: "Reason", render: r => r.Status === "InScope" ? pill("Microsoft 365 partner", "ok") : el("div", {}, pill(r.Reason, REASON_CLS[r.Reason]), el("span", { class: "note", text: r.ReasonText })), sortValue: r => r.Reason },
+  { label: "X-TAP today", render: r => statusPill(Object.fromEntries(Object.entries(XTAP)), r.XtapStatus), sortValue: r => r.XtapStatus }
+];
+const itemDetails = r => [
+  ["Item", r.ItemId], ["Feature", featureText(r.Feature)], ["Policy", r.Target === "Default" ? "Default policy (all external tenants / anonymous)" : "Partner policy"],
+  ["Partner", r.PartnerName], ["Partner tenant ID", r.PartnerTenantId], ["Partner domains", list(r.PartnerDomains)], ["Partner cloud", r.PartnerCloud],
+  ["Exchange source", `${SOURCES[r.Source] || r.Source}: ${r.SourceName}`], ["Found in Exchange", r.ExchangeSetting],
+  ["Level found", r.DiscoveredLevel], ["Scope found", r.DiscoveredScopeText],
+  ["Assessment", `${r.Status} \u2014 ${r.ReasonText}`], ["Can be forced", r.Status === "InScope" ? undefined : (r.Overridable ? "Yes (Include = Yes in Selection.csv)" : "No")],
+  ["Decision", r.Include ? "Migrated" : "Not migrated"], ["Why", r.IncludeOrigin],
+  ["Level", r.Level ? `${r.Level} (${r.LevelOrigin})` : undefined], ["Scope", r.Scope ? `${r.Scope} (${r.ScopeOrigin})` : undefined],
+  ["Capability", r.Capability], ["Problems", arr(r.Problems).length ? notes(r.Problems) : undefined], ["Warnings", arr(r.DecisionWarnings).length ? notes(r.DecisionWarnings) : undefined],
+  ["X-TAP today", `${(XTAP[r.XtapStatus] || [r.XtapStatus])[0]}${r.XtapDetail ? " \u2014 " + r.XtapDetail : ""}`], ["Notes", notes(r.Notes)]
+];
+const itemFilters = [{ label: "Feature", value: r => featureText(r.Feature) }, { label: "Assessment", value: r => r.Status === "InScope" ? "In scope" : "Out of scope" }, { label: "Reason", value: r => r.Reason }, { label: "Source", value: r => SOURCES[r.Source] || r.Source }, { label: "Decision", value: r => r.Include ? "Migrated" : "Not migrated" }];
+
+if (kind !== "Collect") {
+  addPanel("actions", "Actions", actions.filter(a => a.Operation !== "NoChange").length, p => {
+    const card = el("div", { class: "card" }, el("h2", { text: kind === "Apply" ? "What was done" : "What would be done" }),
+      el("p", { class: "caption", text: "Entra phase: security groups and the Microsoft 365 collaboration trust of each partner (Security Administrator / Groups Administrator). Exchange phase: the capabilities in the partner and default policies (Exchange Administrator). Click a row for the details." }));
+    p.append(card);
+    table(card, {
+      rows: actions, placeholder: "Search actions...",
+      filters: [{ label: "Phase", value: r => r.Phase }, { label: "Operation", value: r => r.Operation }, { label: "Status", value: r => r.Status }, { label: "Kind", value: r => r.Kind }],
+      columns: [
+        { label: "Id", key: "Id", cls: "nowrap mono" }, { label: "Phase", key: "Phase" },
+        { label: "Operation", render: r => statusPill(OPS, r.Operation), sortValue: r => r.Operation },
+        { label: "Status", render: r => el("div", {}, statusPill(STATUS, r.Status), r.Verified ? el("span", { class: "note", text: r.Verified }) : null), sortValue: r => r.Status },
+        { label: "What", render: r => el("div", {}, r.Kind === "Capability" ? r.Capability : (r.Kind === "Trust" ? "Microsoft 365 collaboration trust" : "Security group"), el("span", { class: "note", text: r.Kind === "Capability" ? featureText(r.Feature) : r.Kind })), sortValue: r => r.Kind + r.Capability },
+        { label: "Target", render: r => el("div", {}, r.Target || "-", el("span", { class: "note mono", text: r.PartnerTenantId || "" })), sortValue: r => r.Target },
+        { label: "Before", value: r => r.Before, cls: "wrap" }, { label: "After", value: r => r.After, cls: "wrap" },
+        { label: "Detail", render: r => el("div", {}, r.Error ? el("span", { style: "color:var(--cp-danger)", text: r.Error }) : (r.Detail || "-"), ...arr(r.Notes).map(n => el("span", { class: "note", text: "\u2022 " + n }))), cls: "wrap" }
+      ],
+      detailTitle: r => `${r.Id} \u00b7 ${r.Operation} ${r.Kind}`,
+      details: r => [["Phase", r.Phase], ["Operation", r.Operation], ["Status", r.Status], ["Verified", r.Verified || undefined], ["Kind", r.Kind], ["Target", r.Target], ["Partner tenant ID", r.PartnerTenantId], ["Feature", r.Feature ? featureText(r.Feature) : undefined], ["Capability", r.Capability], ["Before", r.Before], ["After", r.After], ["Detail", r.Detail], ["Error", r.Error || undefined], ["Notes", notes(r.Notes)], ["Items", list(r.ItemIds)]]
+    });
+  });
+  addPanel("target", "Target configuration", arr(DATA.Target && DATA.Target.Capabilities).length, p => {
+    const tg = DATA.Target || {};
+    const card = el("div", { class: "card" }, el("h2", { text: "Capabilities" }), el("p", { class: "caption", text: "Microsoft 365 X-TAP is an inbound control: each line lets the users of the partner (or of every external tenant, or anonymous users) see the information of the users in the scope, in this tenant." }));
+    p.append(card);
+    table(card, {
+      rows: arr(tg.Capabilities), placeholder: "Search capabilities...",
+      filters: [{ label: "Feature", value: r => featureText(r.Feature) }, { label: "Policy", value: r => r.Target === "Default" ? "Default policy" : "Partner policy" }],
+      columns: [
+        { label: "Policy", render: r => el("div", {}, r.Target === "Default" ? "Default policy" : r.PartnerName, el("span", { class: "note mono", text: r.PartnerTenantId || "all external tenants" })), sortValue: r => r.PartnerName },
+        { label: "Feature", value: r => featureText(r.Feature) }, { label: "Level", key: "Level" },
+        { label: "Capability", key: "Capability", cls: "mono" }, { label: "Scope", key: "Scope", cls: "wrap" }, { label: "Items", render: r => list(r.ItemIds) }
+      ],
+      details: r => [["Policy", r.Target === "Default" ? "Default policy" : `${r.PartnerName} (${r.PartnerTenantId})`], ["Feature", featureText(r.Feature)], ["Level", r.Level], ["Capability", r.Capability], ["Scope", r.Scope], ["Items", list(r.ItemIds)]]
+    });
+    if (arr(tg.Groups).length) {
+      const g = el("div", { class: "card" }, el("h2", { text: "Security groups used as scopes" }));
+      p.append(g);
+      table(g, { rows: arr(tg.Groups), search: false, columns: [{ label: "Group", key: "DisplayName" }, { label: "Kind", value: r => r.Kind === "SharingPolicy" ? "Mailboxes of a sharing policy" : (r.Kind === "Config" ? "Configuration" : "Existing group") }, { label: "Created by the tool", value: r => r.Create ? "Yes, if missing" : "No" }, { label: "Membership", value: r => r.MembershipRule ? "Dynamic: " + r.MembershipRule : (r.Kind === "SharingPolicy" ? `${r.Members} mailbox(es) of ${r.Policy}` : "-"), cls: "wrap" }] });
+    }
+  });
+}
+addPanel("items", kind === "Collect" ? "Migration items" : "Items", items.length, p => {
+  const card = el("div", { class: "card" }, el("h2", { text: kind === "Collect" ? "What was found, item by item" : "Decision for each item" }),
+    el("p", { class: "caption", text: kind === "Collect" ? "One item per feature, Exchange object and partner tenant. Items in scope are proposed for migration; out-of-scope items are listed with the reason (hybrid and on-premises are handled elsewhere). The same list is in Selection.csv." : "Decision for each item of the snapshot: Selection.csv, then the Partners and Features rules of the configuration, then what was found in Exchange Online." }));
+  p.append(card);
+  table(card, { rows: items, columns: itemColumns(kind !== "Collect"), filters: itemFilters.filter(f => kind !== "Collect" || f.label !== "Decision"), detailTitle: r => `${r.ItemId} \u00b7 ${featureText(r.Feature)}`, details: itemDetails, placeholder: "Search items, partners, domains..." });
+});
+if (kind === "Collect") {
+  const partners = {};
+  for (const r of items) {
+    if (r.Target !== "Partner") continue;
+    const key = r.PartnerTenantId || ("?" + arr(r.PartnerDomains).join(","));
+    const p = partners[key] || (partners[key] = { TenantId: r.PartnerTenantId, Name: r.PartnerName, Domains: new Set(), Cloud: r.PartnerCloud, Sources: new Set(), Features: new Set(), InScope: 0, OutOfScope: 0, Reasons: new Set() });
+    arr(r.PartnerDomains).forEach(d => p.Domains.add(d)); p.Sources.add(`${SOURCES[r.Source] || r.Source}: ${r.SourceName}`); p.Features.add(featureText(r.Feature));
+    if (r.Status === "InScope") p.InScope++; else { p.OutOfScope++; p.Reasons.add(r.Reason); }
+  }
+  const xtapPartners = Object.fromEntries(arr(DATA.Xtap && DATA.Xtap.Partners).map(x => [x.TenantId, x]));
+  const confirm = Object.fromEntries(arr(DATA.Partners).map(x => [x.TenantId, x]));
+  const CONFIRM = { Confirmed: ["Confirmed", "ok"], Mismatch: ["Mismatch", "bad"], NotConfirmed: ["To confirm", "warn"] };
+  const prow = Object.values(partners).map(p => ({ ...p, Domains: [...p.Domains], Sources: [...p.Sources], Features: [...p.Features], Reasons: [...p.Reasons], Xtap: xtapPartners[p.TenantId], Confirm: confirm[p.TenantId] }));
+  addPanel("partners", "Partners", prow.length, p => {
+    const card = el("div", { class: "card" }, el("h2", { text: "External organizations" }), el("p", { class: "caption", text: "Each external domain is matched to its Microsoft Entra tenant. X-TAP works per tenant: every domain of the tenant is covered. The tenant ID found from the domains must be confirmed by the partner before the Entra phase (PartnersToConfirm.txt)." }));
+    p.append(card);
+    table(card, {
+      rows: prow, filters: [{ label: "Assessment", value: r => r.InScope ? "In scope" : "Out of scope" }, { label: "Tenant ID", value: r => r.Confirm ? (CONFIRM[r.Confirm.Confirmation] || [r.Confirm.Confirmation])[0] : "" }],
+      columns: [
+        { label: "Partner", render: r => el("div", {}, r.Name || "-", el("span", { class: "note mono", text: r.TenantId || "no tenant" })), sortValue: r => r.Name },
+        { label: "Domains", render: r => list(r.Domains) }, { label: "Features", render: r => list(r.Features) },
+        { label: "Assessment", render: r => r.InScope ? pill(`${r.InScope} item(s) in scope`, "ok") : el("div", {}, ...r.Reasons.map(x => pill(x, REASON_CLS[x]))), sortValue: r => r.InScope },
+        { label: "Tenant ID", render: r => r.Confirm ? el("div", {}, statusPill(CONFIRM, r.Confirm.Confirmation), el("span", { class: "note", text: r.Confirm.ConfirmationSource || r.Confirm.ConfirmationDetail || "" })) : "-", sortValue: r => r.Confirm ? r.Confirm.Confirmation : "" },
+        { label: "X-TAP trust today", render: r => r.Xtap ? statusPill(TRUST, r.Xtap.Trust && r.Xtap.Trust.State) : pill(DATA.Xtap && DATA.Xtap.Readable ? "No partner policy" : "Not read", "muted"), sortValue: r => r.Xtap ? r.Xtap.Trust.State : "" },
+        { label: "Capabilities today", render: r => r.Xtap ? list(arr(r.Xtap.Capabilities).filter(c => c.IsAllowed).map(c => c.Name)) : "-" },
+        { label: "Partner configures", render: r => r.Confirm && arr(r.Confirm.PartnerConfigures).length ? el("div", {}, ...arr(r.Confirm.PartnerConfigures).map(x => el("span", { class: "note", text: "\u2022 " + x }))) : "-", cls: "wrap" }
+      ],
+      details: r => [["Partner", r.Name], ["Tenant ID found", r.TenantId], ["Partner configures on its side", r.Confirm && arr(r.Confirm.PartnerConfigures).length ? notes(r.Confirm.PartnerConfigures) : undefined], ["Tenant ID confirmation", r.Confirm ? `${r.Confirm.Confirmation}${r.Confirm.ConfirmationSource ? " \u2014 " + r.Confirm.ConfirmationSource : ""}${r.Confirm.ConfirmationDetail ? " \u2014 " + r.Confirm.ConfirmationDetail : ""}` : undefined], ["Cloud", r.Cloud], ["Domains", list(r.Domains)], ["Exchange sources", notes(r.Sources)], ["Features", list(r.Features)], ["Items in scope", r.InScope], ["Items out of scope", r.OutOfScope], ["Reasons", list(r.Reasons)]]
+    });
+    const pending = arr(DATA.Partners).filter(x => x.Confirmation !== "Confirmed");
+    if (pending.length) {
+      const c2 = el("div", { class: "card" }, el("h2", { text: "Tenant IDs to confirm" }), el("p", { class: "caption" }, "Send each partner its line and your tenant ID ", el("code", { text: (DATA.Tenant || {}).TenantId || "" }), ". Once confirmed, paste the entries in the Partners section of the configuration (also in PartnersToConfirm.txt). With Entra.RequireConfirmedPartners = $true (default), the Entra phase does not trust an unconfirmed tenant."));
+      c2.append(code(["Partners = @("].concat(pending.map(x => `    @{ Name = '${String(x.Name || "").replace(/'/g, "''")}'; Match = '${arr(x.Domains)[0] || ""}'; TenantId = '${x.TenantId}' }   # ${x.Confirmation === "Mismatch" ? "MISMATCH" : "to confirm"}`), [")"])));
+      p.append(c2);
+    }
+  });
+}
+addPanel("exchange", "Exchange Online", arr(DATA.Exchange && DATA.Exchange.OrganizationRelationships).length + arr(DATA.Exchange && DATA.Exchange.SharingPolicies).length + arr(DATA.Exchange && DATA.Exchange.AvailabilityAddressSpaces).length, p => {
+  const ex = DATA.Exchange || {}; const src = Object.fromEntries(arr(DATA.Sources).map(s => [s.Source + "|" + s.Name, s]));
+  const assess = (source, name) => { const s = src[source + "|" + name]; if (!s) return "-"; return el("div", { class: "chips" }, String(s.Status).split(", ").map(x => pill(x === "InScope" ? "In scope" : (x === "NoSharing" ? "Nothing to migrate" : x), REASON_CLS[x] || "muted"))); };
+  const c1 = el("div", { class: "card" }, el("h2", { text: "Organization relationships" }), el("p", { class: "caption", text: "Free/Busy and MailTips with other organizations. The relationship created by the Hybrid Configuration Wizard (O365 to On-premises) is out of scope: the Exchange hybrid application handles it." }));
+  p.append(c1);
+  table(c1, {
+    rows: arr(ex.OrganizationRelationships), search: arr(ex.OrganizationRelationships).length > 8, empty: "No organization relationship.",
+    columns: [
+      { label: "Name", key: "Name" }, { label: "Enabled", render: r => r.Enabled ? pill("Enabled", "ok") : pill("Disabled", "muted"), sortValue: r => r.Enabled },
+      { label: "Domains", render: r => list(r.DomainNames) },
+      { label: "Free/Busy", value: r => r.FreeBusyAccessEnabled ? `${r.FreeBusyAccessLevel}${r.FreeBusyAccessScope ? " \u00b7 scope " + r.FreeBusyAccessScope : ""}` : "Off" },
+      { label: "MailTips", value: r => r.MailTipsAccessEnabled ? `${r.MailTipsAccessLevel}${r.MailTipsAccessScope ? " \u00b7 scope " + r.MailTipsAccessScope : ""}` : "Off" },
+      { label: "Partner endpoint", value: r => r.TargetSharingEpr || r.TargetAutodiscoverEpr || r.TargetApplicationUri || "-", cls: "wrap" },
+      { label: "Assessment", render: r => assess("OrganizationRelationship", r.Name) }
+    ],
+    details: r => Object.entries(r).map(([k, v]) => [k, v && typeof v === "object" && !Array.isArray(v) ? JSON.stringify(v) : (Array.isArray(v) ? v.join(", ") : v)])
+  });
+  const c2 = el("div", { class: "card" }, el("h2", { text: "Sharing policies" }), el("p", { class: "caption", text: "Calendar sharing by users: a domain, * (every external organization) or Anonymous (published calendars). Mailboxes: user, shared, room and equipment mailboxes assigned to the policy." }));
+  p.append(c2);
+  table(c2, {
+    rows: arr(ex.SharingPolicies), search: false, empty: "No sharing policy.",
+    columns: [
+      { label: "Name", key: "Name" }, { label: "Default", value: r => r.Default ? "Yes" : "" }, { label: "Enabled", render: r => r.Enabled ? pill("Enabled", "ok") : pill("Disabled", "muted"), sortValue: r => r.Enabled },
+      { label: "Mailboxes", value: r => r.Mailboxes === null || r.Mailboxes === undefined ? "not collected" : r.Mailboxes, sortValue: r => String(r.Mailboxes).padStart(9, "0") },
+      { label: "Entries", render: r => el("div", {}, arr(r.Domains).map(d => el("div", { class: "mono", text: d }))), cls: "wrap" },
+      { label: "Assessment", render: r => assess("SharingPolicy", r.Name) }
+    ],
+    details: r => Object.entries(r).map(([k, v]) => [k, Array.isArray(v) ? notes(v) : v])
+  });
+  const c3 = el("div", { class: "card" }, el("h2", { text: "Availability address spaces" }));
+  p.append(c3);
+  table(c3, { rows: arr(ex.AvailabilityAddressSpaces), search: false, empty: "No availability address space.", columns: [{ label: "Forest name", key: "ForestName" }, { label: "Access method", key: "AccessMethod" }, { label: "Target tenant ID", key: "TargetTenantId", cls: "mono" }, { label: "Endpoint", value: r => r.TargetServiceEpr || r.TargetAutodiscoverEpr || "-", cls: "wrap" }, { label: "Assessment", render: r => assess("AvailabilityAddressSpace", r.ForestName) }], details: r => Object.entries(r) });
+  const hy = arr(ex.OnPremisesOrganizations), ioc = arr(ex.IntraOrganizationConnectors);
+  const c4 = el("div", { class: "card" }, el("h2", { text: "Exchange hybrid (out of scope)" }), el("p", { class: "caption", text: hy.length || ioc.length ? "Free/Busy with the on-premises organization is handled by the Exchange hybrid configuration (dedicated hybrid application). Shown for information only." : "No Exchange hybrid object found." }));
+  if (hy.length) c4.append(el("h3", { text: "On-premises organizations" }), el("div", {}, hy.map(h => el("p", {}, el("strong", { text: h.Name }), ` \u2014 relationship ${h.OrganizationRelationship || "-"} \u00b7 hybrid domains `, list(h.HybridDomains)))));
+  if (ioc.length) c4.append(el("h3", { text: "Intra-organization connectors" }), el("div", {}, ioc.map(h => el("p", {}, el("strong", { text: h.Name }), ` \u2014 ${h.Enabled ? "enabled" : "disabled"} \u00b7 ${h.DiscoveryEndpoint || ""} \u00b7 `, list(h.TargetAddressDomains)))));
+  p.append(c4);
+  const c5 = el("div", { class: "card" }, el("h2", { text: "Accepted domains of this tenant" }), list(ex.AcceptedDomains));
+  if (arr(ex.Errors).length) c5.append(el("h3", { text: "Collection warnings" }), notes(ex.Errors));
+  p.append(c5);
+});
+if (DATA.Xtap) {
+  addPanel("xtap", "X-TAP today", null, p => {
+    const x = DATA.Xtap;
+    const card = el("div", { class: "card" }, el("h2", { text: kind === "Collect" ? "Microsoft 365 cross-tenant access policy at collection time" : "Microsoft 365 cross-tenant access policy, read before the changes" }));
+    p.append(card);
+    if (!x.Readable) { card.append(el("p", { class: "muted", text: "Not read: " + (x.Error || "no Microsoft Graph connection") })); return; }
+    card.append(el("p", {}, "Default policy \u2014 Microsoft 365 collaboration: ", statusPill(TRUST, x.Default && x.Default.Trust && x.Default.Trust.State)));
+    const rows = [];
+    for (const c of arr(x.Default && x.Default.Capabilities)) rows.push({ Policy: "Default policy", TenantId: "", ...c });
+    for (const pp of arr(x.Partners)) for (const c of arr(pp.Capabilities)) rows.push({ Policy: pp.Name || pp.TenantId, TenantId: pp.TenantId, Trust: pp.Trust && pp.Trust.State, ...c });
+    const gname = id => (x.GroupNames && x.GroupNames[String(id).toLowerCase()]) || null;
+    const scopeText = s => s.ResourceId === "All" ? "All" : (s.ResourceType === "group" && gname(s.ResourceId) ? `group ${gname(s.ResourceId)}` : `${s.ResourceType} ${s.ResourceId}`);
+    table(card, {
+      rows, empty: "No Microsoft 365 capability configured.",
+      columns: [
+        { label: "Policy", render: r => el("div", {}, r.Policy, el("span", { class: "note mono", text: r.TenantId })), sortValue: r => r.Policy },
+        { label: "Capability", key: "Name", cls: "mono" }, { label: "Feature", value: r => featureText(r.Feature) || "(other)" },
+        { label: "Allowed", render: r => r.IsAllowed ? pill("Allowed", "ok") : pill("Not allowed", "muted"), sortValue: r => r.IsAllowed },
+        { label: "Scope", value: r => arr(r.Included).map(scopeText).join(", ") + (arr(r.Excluded).length ? " (excluded: " + arr(r.Excluded).map(scopeText).join(", ") + ")" : ""), cls: "wrap" },
+        { label: "Modified", value: r => fmtDate(r.LastModified), cls: "nowrap" }
+      ],
+      details: r => [["Policy", r.Policy], ["Tenant ID", r.TenantId], ["Capability", r.Name], ["Allowed", r.IsAllowed ? "Yes" : "No"], ["Included", notes(arr(r.Included).map(s => `${scopeText(s)}${s.ResourceId !== "All" ? " (" + s.ResourceId + ")" : ""}`))], ["Excluded", notes(arr(r.Excluded).map(s => `${scopeText(s)} (${s.ResourceId})`))], ["Modified", fmtDate(r.LastModified)]]
+    });
+    const trusts = arr(x.Partners).filter(pp => pp.Trust && pp.Trust.State !== "NotConfigured");
+    if (trusts.length) {
+      card.append(el("h3", { text: "Partner policies with a Microsoft 365 collaboration trust" }));
+      card.append(el("div", { class: "chips" }, trusts.map(pp => el("span", { class: "chip" }, `${pp.Name || pp.TenantId} `, statusPill(TRUST, pp.Trust.State)))));
+    }
+  });
+}
+if (DATA.Cutover) {
+  addPanel("cutover", "Manual cutover", arr(DATA.Cutover.Steps).length, p => {
+    const cut = DATA.Cutover;
+    p.append(el("div", { class: "callout warn" }, el("strong", { text: "Not run by the tool" }), el("p", { text: "Organization relationships, availability address spaces and sharing policies take precedence over Microsoft 365 X-TAP. When both tenants are ready, disable the old objects in the same window as the partner, test, and keep the rollback commands at hand. Remove the old objects only after validation. The same commands are in ManualCutover.txt." })));
+    if (!arr(cut.Steps).length) p.append(el("div", { class: "card" }, el("p", { class: "muted", text: "No Exchange Online object is migrated: nothing to cut over." })));
+    for (const s of arr(cut.Steps)) {
+      p.append(el("div", { class: "cut" },
+        el("h3", {}, pill(s.Source, "accent"), s.Name),
+        el("div", { class: "chips" }, arr(s.Features).map(f => el("span", { class: "chip", text: featureText(f) })), arr(s.Partners).map(f => el("span", { class: "chip", text: f }))),
+        arr(s.Warnings).length ? el("div", { class: "callout warn", style: "margin-top:10px" }, notes(s.Warnings)) : null,
+        el("span", { class: "label", text: "Cutover" }), code(s.Commands),
+        el("span", { class: "label", text: "Rollback" }), code(s.Rollback),
+        arr(s.Cleanup).length ? [el("span", { class: "label", text: "Cleanup, after validation" }), code(s.Cleanup)] : null));
+    }
+    if (arr(cut.Partners).length) {
+      const card = el("div", { class: "card" }, el("h2", { text: "Partners to coordinate with" }), el("p", { class: "caption" }, "X-TAP is inbound: this tenant now lets each partner read its information. For your users to see the partner's information, the partner configures the same on its side for your tenant ID ", el("code", { text: cut.OwnTenantId }), ", and disables its own organization relationship in the same window."));
+      p.append(card);
+      table(card, { rows: arr(cut.Partners), search: false, columns: [{ label: "Partner", key: "Name" }, { label: "Tenant ID", key: "TenantId", cls: "mono" }, { label: "Domains", render: r => list(r.Domains) }, { label: "Capabilities in this tenant", render: r => list(r.Capabilities) }, { label: "The partner configures", render: r => arr(r.PartnerConfigures).length ? notes(r.PartnerConfigures) : "its own migration, for your tenant ID", cls: "wrap" }] });
+    }
+  });
+}
+if (kind === "Collect") {
+  addPanel("next", "Next steps", null, p => {
+    const cfg = ".\\config\\XTapSharingMigration.config.psd1";
+    const steps = [
+      ["Review this inventory", "Check the items in scope and the reasons of the items out of scope. Hybrid relationships are excluded on purpose (Exchange hybrid application).", null, "Any administrator"],
+      ["Confirm each partner's tenant ID", "Exchange tenant IDs with each partner: send yours, get theirs confirmed, and paste the Partners entries of PartnersToConfirm.txt in the configuration. An unconfirmed tenant is blocked in the Entra phase (Entra.RequireConfirmedPartners).", null, "Change owner + partner administrators"],
+      ["Choose what to migrate (optional)", `Either adjust the rules of ${cfg} (Features: force a level or a scope; Partners: per tenant; Groups: security groups), or complete Selection.csv of this run (Include, Level, Scope) and pass it with -SelectionPath.`, null, "Any administrator"],
+      ["Check the plan", "Read-only: compares the target with the tenant and writes Plan.html.", [".\\Invoke-XTapSharingMigration.ps1 -Mode Plan", ".\\Invoke-XTapSharingMigration.ps1 -Mode Plan -SelectionPath .\\Selection.csv"], "Exchange or Entra administrator"],
+      ["Phase Entra", "Security groups and the Microsoft 365 collaboration trust of each partner.", [".\\Invoke-XTapSharingMigration.ps1 -Mode Apply -Phase Entra"], "Security Administrator + Groups Administrator (or Global Administrator)"],
+      ["Phase Exchange", "Free/Busy, MailTips and calendar sharing capabilities.", [".\\Invoke-XTapSharingMigration.ps1 -Mode Apply -Phase Exchange"], "Exchange Administrator (or Global Administrator)"],
+      ["Contact each partner and plan the window", "Send your tenant ID and what you configured, get theirs; agree on the date, the test accounts on both sides, the GO / STOP criteria and who rolls back (guide, chapter 11).", null, "Change owner + partner administrators"],
+      ["Cutover, both sides in the same window", "Not done by the tool: run the commands of ManualCutover.txt (disable the organization relationships and the migrated sharing policy entries), the partner does the same.", null, "Exchange Administrator"],
+      ["Test, then GO or rollback", "Free/Busy in the Scheduling Assistant, MailTips, calendar sharing, published calendars - and the GetSchedule call in the browser developer tools (guide, chapter 11). Rollback commands are in the same file.", null, "Both sides"],
+      ["Clean up after stabilization", "Remove the old objects (cleanup commands), then run Collect again: the new inventory is the closing picture.", null, "Exchange Administrator"]
+    ];
+    const card = el("div", { class: "card" }, el("h2", { text: "From this inventory to Microsoft 365 X-TAP" }));
+    card.append(el("ol", { class: "steps" }, steps.map(([title, text, cmds, who]) => el("li", {}, el("span", { class: "who" }, pill(who, "muted")), el("strong", { text: title }), el("p", { text }), cmds ? code(cmds) : null))));
+    p.append(card);
+  });
+}
+if (DATA.Settings && kind !== "Collect") {
+  addPanel("settings", "Settings used", null, p => {
+    const s = DATA.Settings;
+    const card = el("div", { class: "card" }, el("h2", { text: "Configuration rules applied" }));
+    p.append(card);
+    table(card, { rows: Object.entries(s.Features || {}).map(([k, v]) => ({ Feature: featureText(k), ...v })), search: false, columns: [{ label: "Feature", key: "Feature" }, { label: "Migrate", value: r => r.Migrate ? "Yes" : "No" }, { label: "Level", key: "Level" }, { label: "Scope", key: "Scope" }] });
+    card.append(el("h3", { text: "Partners rules" }), arr(s.Partners).length ? code(JSON.stringify(s.Partners, null, 2).split("\n")) : el("p", { class: "muted", text: "None." }));
+    card.append(el("h3", { text: "Groups" }), Object.keys(s.Groups || {}).length ? code(JSON.stringify(s.Groups, null, 2).split("\n")) : el("p", { class: "muted", text: "None." }));
+    card.append(el("h3", { text: "Other" }), code(JSON.stringify({ SharingPolicyGroups: s.SharingPolicyGroups, Entra: s.Entra, Apply: s.Apply }, null, 2).split("\n")));
+  });
+}
+
+for (const s of sections) {
+  tabs.append(el("button", { type: "button", id: "tab-" + s.id, role: "tab", "aria-selected": "false", onclick: () => activate(s.id) }, s.title, s.count !== null && s.count !== undefined ? el("span", { class: "count", text: s.count }) : null));
+  const panel = el("section", { class: "panel", id: "panel-" + s.id, role: "tabpanel" });
+  panels.append(panel);
+  s.build(panel);
+}
+tabs.append(el("span", { class: "spacer" }), el("button", { type: "button", class: "tool", text: "Theme", title: "Light / dark", onclick: () => { const n = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark"; document.documentElement.setAttribute("data-theme", n); try { localStorage.setItem("xsm-theme", n); } catch (e) { } } }), el("button", { type: "button", class: "tool", text: "Print", onclick: () => window.print() }));
+const wanted = (location.hash || "").slice(1);
+activate(sections.some(s => s.id === wanted) ? wanted : sections[0].id);
+window.addEventListener("hashchange", () => { const h = (location.hash || "").slice(1); if (sections.some(s => s.id === h)) activate(h); });
+$("#footer").innerHTML = "";
+$("#footer").append(`${(DATA.Tool && DATA.Tool.Name) || "X-TAP Sharing Migration"} ${(DATA.Tool && DATA.Tool.Version) || ""} \u00b7 ${(DATA.Tool && DATA.Tool.Author) || ""} \u00b7 generated ${fmtDate(DATA.GeneratedAt)}. Personal project, not an official Microsoft product. Microsoft Graph v1.0 only; Exchange Online read-only.`);
+</script>
+</body></html>

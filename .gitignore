@@ -1,0 +1,4 @@
+# Created at run time - never commit output or logs (they contain tenant data)
+output/
+logs/
+*.zip
