@@ -78,10 +78,10 @@ Every report is a self-contained HTML file — light and dark themes, search and
 | Item | Requirement |
 |---|---|
 | PowerShell | 7.4 or later |
-| Modules | `Microsoft.Graph.Authentication` 2.25+, `ExchangeOnlineManagement` 3.9+ |
-| Collect | Exchange role that can read the configuration; Graph `Policy.Read.All`, `CrossTenantInformation.ReadBasic.All`, `Group.Read.All` |
-| Phase Entra | Security Administrator (+ Groups Administrator) or Global Administrator |
-| Phase Exchange | Exchange Administrator or Global Administrator |
+| Modules | `Microsoft.Graph.Authentication` 2.25+ for every run; `ExchangeOnlineManagement` 3.9+ for Collect only |
+| Collect / Plan | Read only — Exchange role that can read the configuration; Graph `Policy.Read.All`, `CrossTenantInformation.ReadBasic.All`, `Group.Read.All` |
+| Phase Entra | Creates the trusts and groups — Security Administrator (+ Groups Administrator) or Global Administrator; no Exchange role |
+| Phase Exchange | Writes the capabilities — Exchange Administrator or Global Administrator |
 
 ## Quick start
 
@@ -96,6 +96,16 @@ notepad .\config\XTapSharingMigration.config.psd1          # Tenant.TenantId, Te
 .\Invoke-XTapSharingMigration.ps1 -Mode Apply -Phase Exchange  # Free/Busy, MailTips, calendar sharing
 .\Invoke-XTapSharingMigration.ps1 -Mode Plan -Feature FreeBusy, MailTips   # only some features
 ```
+
+**Two administrators** — each one runs its own phase, from the same Collect folder and the same configuration (copied with all its files, or on a shared copy of the tool):
+
+```powershell
+$run = '.\output\contoso.onmicrosoft.com\2026-10-01_101500_Collect'
+.\Invoke-XTapSharingMigration.ps1 -Mode Apply -Phase Entra    -SnapshotPath $run -UserPrincipalName entra-admin@contoso.com
+.\Invoke-XTapSharingMigration.ps1 -Mode Apply -Phase Exchange -SnapshotPath $run -UserPrincipalName exo-admin@contoso.com
+```
+
+What to hand over, the accounts, the order and what happens if the Exchange phase runs first: [guide, chapter 8 — Two administrators](docs/XTapSharingMigration-Guide.md#two-administrators).
 
 The zip of each [release](https://github.com/Nico77600/XTapSharingMigration/releases) contains only the files needed to run, with the HTML guide.
 

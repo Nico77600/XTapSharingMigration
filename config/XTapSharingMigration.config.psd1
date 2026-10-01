@@ -25,9 +25,10 @@
     #   Interactive : an administrator signs in (browser window, MFA supported).
     #   DeviceCode  : code to enter on https://microsoft.com/devicelogin (terminal without a browser).
     #   Certificate : app-only (application with a certificate) - see the guide, Annex C.
-    # The two phases can be run by different administrators: ExchangeAdmin is expected for -Mode Collect,
-    # -Mode Plan and -Phase Exchange; EntraAdmin for -Phase Entra and -Phase All ('' = any account of the
-    # tenant). -UserPrincipalName on the command line overrides both.
+    # The two phases can be run by different administrators (guide, chapter 8 "Two administrators"):
+    # ExchangeAdmin is expected for -Mode Collect, -Mode Plan and -Phase Exchange; EntraAdmin for -Phase Entra
+    # (Plan or Apply) and -Mode Apply -Phase All. '' = any account of the tenant (EntraAdmin '' = ExchangeAdmin).
+    # -UserPrincipalName on the command line overrides both. The tool stops if another account signs in.
     # ---------------------------------------------------------------------
     Authentication = @{
         Mode                  = 'Interactive'

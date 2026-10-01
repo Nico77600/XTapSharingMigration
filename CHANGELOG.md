@@ -3,6 +3,16 @@
 All notable changes are listed here. Versions follow MAJOR.MINOR.PATCH (see the guide, Annex E).
 Author: Nicolas Fabert.
 
+## [Unreleased]
+
+### Fixed
+- **Two administrators**: `-Mode Plan -Phase Entra` now expects the `Authentication.EntraAdmin` account (it expected `ExchangeAdmin`, so the Entra administrator was refused without `-UserPrincipalName`), and a level chosen during the Entra phase is recorded in `LevelChoices.json` under the account of that run. One function, `Get-XsmExpectedAccount`, gives the account of every mode and phase.
+
+### Documentation
+- Guide chapter 8 — **Two administrators**: the Entra and Exchange phases run separately from the same Collect folder — what to hand over (the Collect folder and the configuration, or a shared copy of the tool), `-SnapshotPath` and `-UserPrincipalName`, the same `-SelectionPath` / `-Feature`, the order and what the Exchange phase does when it runs first. Matching example in the script help and the README, two rows in Annex A, prerequisites (the Entra administrator needs only `Microsoft.Graph.Authentication`).
+- README redesigned like the other repositories: light and dark graphics rendered from the guide (`tools\New-ReadmeImages.ps1`), How it works, From inventory to cutover, Reports grid, requirements per phase.
+- 47 Pester tests.
+
 ## [1.0.1] — 2026-10-01
 
 ### Changed

@@ -316,3 +316,24 @@ function Get-XsmGraphScopes {
     }
     return , @($scopes | Select-Object -Unique)
 }
+
+function Get-XsmExpectedAccount {
+    <#
+    .SYNOPSIS
+        Account expected for a run ('' = any account of the tenant).
+    .DESCRIPTION
+        -UserPrincipalName first. Then Authentication.EntraAdmin for the Entra phase (Plan -Phase Entra, Apply -Phase
+        Entra, Apply -Phase All) - or ExchangeAdmin when EntraAdmin is empty - and Authentication.ExchangeAdmin for
+        everything else (Collect, Plan, Apply -Phase Exchange).
+    #>
+    param(
+        [Parameter(Mandatory)]$Settings,
+        [Parameter(Mandatory)][ValidateSet('Collect', 'Plan', 'Apply')][string]$Mode,
+        [ValidateSet('Entra', 'Exchange', 'All')][string]$Phase = 'All',
+        [string]$UserPrincipalName
+    )
+    if ($UserPrincipalName) { return $UserPrincipalName }
+    $entraRun = $Mode -ne 'Collect' -and ($Phase -eq 'Entra' -or ($Mode -eq 'Apply' -and $Phase -eq 'All'))
+    if ($entraRun -and $Settings.Authentication.EntraAdmin) { return [string]$Settings.Authentication.EntraAdmin }
+    return [string]$Settings.Authentication.ExchangeAdmin
+}

@@ -67,6 +67,21 @@ Describe 'Configuration' {
         $s = Set-TestSettings { }
         InModuleScope XTapSharingMigration { Resolve-XsmLevelName 'FreeBusy' 'limiteddetails' } | Should -Be 'LimitedDetails'
     }
+    It 'expects the account of the administrator of each phase' {
+        $s = Set-TestSettings { param($s) $s.Authentication.ExchangeAdmin = 'exo-admin@contoso.com'; $s.Authentication.EntraAdmin = 'entra-admin@contoso.com' }
+        Get-XsmExpectedAccount -Settings $s -Mode Collect | Should -Be 'exo-admin@contoso.com'
+        Get-XsmExpectedAccount -Settings $s -Mode Plan | Should -Be 'exo-admin@contoso.com'
+        Get-XsmExpectedAccount -Settings $s -Mode Plan -Phase Exchange | Should -Be 'exo-admin@contoso.com'
+        Get-XsmExpectedAccount -Settings $s -Mode Plan -Phase Entra | Should -Be 'entra-admin@contoso.com'
+        Get-XsmExpectedAccount -Settings $s -Mode Apply -Phase Entra | Should -Be 'entra-admin@contoso.com'
+        Get-XsmExpectedAccount -Settings $s -Mode Apply -Phase All | Should -Be 'entra-admin@contoso.com'
+        Get-XsmExpectedAccount -Settings $s -Mode Apply -Phase Exchange | Should -Be 'exo-admin@contoso.com'
+        Get-XsmExpectedAccount -Settings $s -Mode Apply -Phase Exchange -UserPrincipalName 'other@contoso.com' | Should -Be 'other@contoso.com'
+        $s.Authentication.EntraAdmin = ''
+        Get-XsmExpectedAccount -Settings $s -Mode Apply -Phase Entra | Should -Be 'exo-admin@contoso.com'
+        $s.Authentication.ExchangeAdmin = ''
+        Get-XsmExpectedAccount -Settings $s -Mode Apply -Phase Entra | Should -BeNullOrEmpty
+    }
 }
 
 Describe 'Catalogue and parsing' {

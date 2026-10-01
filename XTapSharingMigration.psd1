@@ -19,7 +19,7 @@
     FunctionsToExport = @(
         'Import-XsmConfiguration', 'ConvertTo-XsmScopeSpec', 'Format-XsmScope', 'Get-XsmCapabilityName'
         'Start-XsmLog', 'Stop-XsmLog', 'Write-XsmLog', 'Write-XsmBanner', 'Write-XsmStep', 'Write-XsmSection', 'Write-XsmItem', 'Write-XsmTable', 'Write-XsmSummary', 'Format-XsmDuration'
-        'Import-XsmModules', 'Connect-XsmExchange', 'Disconnect-XsmExchange', 'Connect-XsmGraph', 'Disconnect-XsmGraph', 'Get-XsmGraphScopes'
+        'Import-XsmModules', 'Connect-XsmExchange', 'Disconnect-XsmExchange', 'Connect-XsmGraph', 'Disconnect-XsmGraph', 'Get-XsmGraphScopes', 'Get-XsmExpectedAccount'
         'New-XsmRunDirectory', 'Get-XsmExchangeInventory', 'Get-XsmExternalDomains', 'Resolve-XsmDomainTenant', 'Resolve-XsmDomainTenants', 'Test-XsmTenantInfoAvailable', 'Get-XsmXtapState'
         'Get-XsmMigrationItems', 'Get-XsmItemDecision', 'Get-XsmPartnerConfirmation', 'Export-XsmSelection', 'Import-XsmSelection', 'Save-XsmJson'
         'Find-XsmLatestSnapshot', 'Import-XsmSnapshot', 'Import-XsmSharingPolicyMailboxes'

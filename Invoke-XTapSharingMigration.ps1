@@ -53,7 +53,8 @@
     Configuration file. Default: config\XTapSharingMigration.config.psd1 next to this script.
 
 .PARAMETER UserPrincipalName
-    Account expected for this run (overrides Authentication.ExchangeAdmin / Authentication.EntraAdmin).
+    Account expected for this run (overrides Authentication.ExchangeAdmin / Authentication.EntraAdmin). The
+    tool stops if another account signs in.
 
 .PARAMETER Force
     Apply: no confirmation prompt (required when the run is not interactive).
@@ -73,6 +74,15 @@
 .EXAMPLE
     .\Invoke-XTapSharingMigration.ps1 -Mode Apply -Phase Exchange
     Capabilities (Exchange administrator), once the Entra phase is done.
+
+.EXAMPLE
+    $run = '.\output\contoso.onmicrosoft.com\2026-10-01_101500_Collect'
+    .\Invoke-XTapSharingMigration.ps1 -Mode Plan  -Phase Entra    -SnapshotPath $run -UserPrincipalName entra-admin@contoso.com
+    .\Invoke-XTapSharingMigration.ps1 -Mode Apply -Phase Entra    -SnapshotPath $run -UserPrincipalName entra-admin@contoso.com
+    .\Invoke-XTapSharingMigration.ps1 -Mode Apply -Phase Exchange -SnapshotPath $run -UserPrincipalName exo-admin@contoso.com
+    Two administrators, the same Collect folder (copied with its files if they work on different computers),
+    the same configuration and the same -SelectionPath / -Feature. The Entra phase needs only
+    Microsoft.Graph.Authentication. Guide, chapter 8 "Two administrators".
 
 .EXAMPLE
     .\Invoke-XTapSharingMigration.ps1 -Mode Plan -Feature FreeBusy, MailTips
@@ -132,8 +142,7 @@ try {
         if ($settings.RunFeatures.Count) { $banner['Features'] = @('Calendar', (($settings.RunFeatures -join ', ') + "  (-Feature: the other features are not migrated in this run)")) }
         $banner['Config'] = @('File', $settings.Path); $banner['Log'] = @('Log', $logPath)
         Write-XsmBanner -Title 'X-TAP Sharing Migration' -Subtitle "Free/Busy $dot MailTips $dot calendar sharing  $([char]0x2192)  Microsoft 365 X-TAP" -Details $banner
-        $expectedExchange = if ($UserPrincipalName) { $UserPrincipalName } else { $settings.Authentication.ExchangeAdmin }
-        $expectedEntra = if ($UserPrincipalName) { $UserPrincipalName } elseif ($settings.Authentication.EntraAdmin) { $settings.Authentication.EntraAdmin } else { $settings.Authentication.ExchangeAdmin }
+        $runAccount = Get-XsmExpectedAccount -Settings $settings -Mode $Mode -Phase $Phase -UserPrincipalName $UserPrincipalName
 
         # =====================================================================================================
         # COLLECT
@@ -149,7 +158,7 @@ try {
             Write-XsmLog 'INFO' ("Modules: " + (($versions.GetEnumerator() | ForEach-Object { "$($_.Key) $($_.Value)" }) -join ', '))
             if ($settings.Authentication.Mode -eq 'Interactive') { Write-XsmItem Info 'Two sign-ins may be asked (Microsoft Graph, then Exchange Online): use an administrator of the tenant.' -Icon People }
             try {
-                $graph = Connect-XsmGraph -Settings $settings -Scopes (Get-XsmGraphScopes -Mode Collect) -ExpectedAccount $expectedExchange
+                $graph = Connect-XsmGraph -Settings $settings -Scopes (Get-XsmGraphScopes -Mode Collect) -ExpectedAccount $runAccount
                 Write-XsmItem Ok "$($graph.Account)  $dot tenant verified  $dot Microsoft.Graph.Authentication $($versions['Microsoft.Graph.Authentication'])"
                 if ($graph.MissingScopes.Count) { Write-XsmItem Warn "Permissions not granted: $($graph.MissingScopes -join ', ') - some information may be missing." }
                 $xtap = Get-XsmXtapState -AllPartners
@@ -165,7 +174,7 @@ try {
             }
 
             Write-XsmStep 2 $total 'Exchange Online: sharing configuration (read-only)' -Icon Exchange
-            $exo = Connect-XsmExchange -Settings $settings -ExpectedAccount $expectedExchange
+            $exo = Connect-XsmExchange -Settings $settings -ExpectedAccount $runAccount
             Write-XsmItem Ok "$($exo.Account)  $dot tenant verified  $dot ExchangeOnlineManagement $($versions['ExchangeOnlineManagement'])"
             $runDir = New-XsmRunDirectory -Settings $settings -Name 'Collect'
             $collectId = (Split-Path $runDir -Leaf) -replace '_Collect$', ''
@@ -327,7 +336,7 @@ try {
         if ($open.Count) {
             if ([Console]::IsInputRedirected -or -not [Environment]::UserInteractive) {
                 foreach ($c in $open) { Write-XsmItem Warn ("{0} - {1}: several levels found ({2}). Not interactive: these items stay blocked until a level is chosen." -f $c.PartnerName, $c.Feature, (@($c.Options | ForEach-Object { $_.Level }) -join ' / ')) }
-            } elseif (Request-XsmLevelChoices -Conflicts $open -Choices $levelChoices -Account $(if ($UserPrincipalName) { $UserPrincipalName } elseif ($expectedExchange) { $expectedExchange } else { [Environment]::UserName })) {
+            } elseif (Request-XsmLevelChoices -Conflicts $open -Choices $levelChoices -Account $(if ($runAccount) { $runAccount } else { [Environment]::UserName })) {
                 Save-XsmLevelChoices -Snapshot $snapshot -Choices $levelChoices
                 $target = New-XsmTargetState -Snapshot $snapshot -Settings $settings -Selection $selection -MailboxesByPolicy $mailboxes -LevelChoices $levelChoices
             }
@@ -347,9 +356,8 @@ try {
         $null = Import-XsmModules -Graph -Mode $settings.Authentication.Mode
         $createsGroups = [bool]@($target.Groups | Where-Object Create).Count
         $scopes = Get-XsmGraphScopes -Mode $Mode -Phase $Phase -Groups:$createsGroups
-        $account = if ($Mode -eq 'Apply' -and $Phase -in 'Entra', 'All') { $expectedEntra } else { $expectedExchange }
         if ($settings.Authentication.Mode -eq 'Interactive') { Write-XsmItem Info ("A sign-in window may open: sign in with {0}." -f $(if ($Mode -eq 'Apply') { @{ Entra = 'a Security Administrator / Groups Administrator (or Global Administrator)'; Exchange = 'an Exchange Administrator (or Global Administrator)'; All = 'a Global Administrator' }[$Phase] } else { 'an administrator of the tenant (read-only use)' })) -Icon People }
-        $graph = Connect-XsmGraph -Settings $settings -Scopes $scopes -ExpectedAccount $account
+        $graph = Connect-XsmGraph -Settings $settings -Scopes $scopes -ExpectedAccount $runAccount
         Write-XsmItem Ok "$($graph.Account)  $dot tenant verified  $dot $($scopes -join ', ')"
         if ($graph.MissingScopes.Count) { Write-XsmItem Warn "Permissions not granted: $($graph.MissingScopes -join ', ')." }
         $live = Get-XsmLiveState -Target $target -Members:($Phase -in 'Entra', 'All')

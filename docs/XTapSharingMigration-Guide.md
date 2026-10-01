@@ -24,7 +24,7 @@ Collect | `.\Invoke-XTapSharingMigration.ps1` — read-only inventory: `Inventor
 Confirm the partners | Exchange tenant IDs with each partner and paste the `Partners` entries in the configuration.
 Plan | `.\Invoke-XTapSharingMigration.ps1 -Mode Plan` — what would be configured, compared with the tenant. Nothing changes.
 Apply, phase Entra | `-Mode Apply -Phase Entra` — groups and trusts (Security / Groups Administrator).
-Apply, phase Exchange | `-Mode Apply -Phase Exchange` — Free/Busy, MailTips, calendar sharing (Exchange Administrator).
+Apply, phase Exchange | `-Mode Apply -Phase Exchange` — Free/Busy, MailTips, calendar sharing (Exchange Administrator). Two administrators: the same Collect folder for both phases (chapter 8).
 Cut over with each partner | Manual: contact the partner, plan the window, disable the old objects with the commands of the reports, test — chapter 11.
 ```
 
@@ -194,7 +194,7 @@ Partners = @(
 | Item | Requirement |
 |---|---|
 | PowerShell | **7.4** or later |
-| Modules | `Microsoft.Graph.Authentication` 2.25 or later, `ExchangeOnlineManagement` 3.9 or later (not 3.10.0 in certificate mode) |
+| Modules | `Microsoft.Graph.Authentication` 2.25 or later, `ExchangeOnlineManagement` 3.9 or later (not 3.10.0 in certificate mode). `ExchangeOnlineManagement` is used by **Collect** only: an administrator who runs only Plan or Apply — the Entra administrator, typically — needs just `Microsoft.Graph.Authentication`. |
 | Console | Windows Terminal (colours and icons); any PowerShell console works |
 | Network | `graph.microsoft.com`, `login.microsoftonline.com`, `outlook.office365.com` |
 
@@ -250,8 +250,8 @@ Everything is in `config\XTapSharingMigration.config.psd1`, a PowerShell data fi
 | `Tenant.TenantId` | The tenant to configure. Checked after every sign-in: the tool stops if it is connected to another tenant. |
 | `Tenant.Organization` | `xxx.onmicrosoft.com`. Required in certificate mode; used for the output folder name. |
 | `Authentication.Mode` | `Interactive` (browser, MFA), `DeviceCode` (code on another device), `Certificate` (app-only, Annex C). |
-| `Authentication.ExchangeAdmin` | Account expected for Collect, Plan and `-Phase Exchange` (`''` = any account of the tenant). |
-| `Authentication.EntraAdmin` | Account expected for `-Phase Entra` and `-Phase All`. `-UserPrincipalName` overrides both. |
+| `Authentication.ExchangeAdmin` | Account expected for Collect, Plan (`-Phase All` or `Exchange`) and `Apply -Phase Exchange` (`''` = any account of the tenant). |
+| `Authentication.EntraAdmin` | Account expected for `-Phase Entra` (Plan and Apply) and `Apply -Phase All` (`''` = the `ExchangeAdmin` account). `-UserPrincipalName` overrides both. The tool stops if another account signs in. |
 | `Authentication.DisableWAM` | `$true`: sign in with the browser instead of the Windows broker. Keep it. |
 | `Authentication.GraphClientId` | Your own app registration for delegated Graph access; `''` = Microsoft Graph Command Line Tools. |
 
@@ -353,6 +353,38 @@ Phase Exchange | `.\Invoke-XTapSharingMigration.ps1 -Mode Apply -Phase Exchange`
 Cutover | With each partner, in the same window: run the commands of `ManualCutover.txt`, test (chapter 11), keep the rollback at hand.
 Clean up | After validation, remove the old objects (commands in the same file) and collect again: the inventory shows what remains.
 ```
+
+### Two administrators
+
+When the Entra and Exchange roles belong to different people, each one runs its own phase — on different days if needed — from the **same Collect**:
+
+```steps
+Exchange administrator — Collect and Plan | `.\Invoke-XTapSharingMigration.ps1`, then `-Mode Plan`: complete `Selection.csv` if needed, confirm the partners (`Partners` entries in the configuration), **answer the level questions** — they are saved in `LevelChoices.json` in the Collect folder.
+Hand over | The Entra administrator needs the **whole Collect folder** (`snapshot.json`, `SharingPolicyMailboxes.csv`, `Selection.csv`, `LevelChoices.json`) and the **configuration file**. Simplest: one shared copy of the tool (file share, administration server) — nothing to copy.
+Entra administrator — phase Entra | `-Mode Plan -Phase Entra`, then `-Mode Apply -Phase Entra`, with `-SnapshotPath` and the same `-SelectionPath` / `-Feature`. The console summary and `Result.html` count the actions left to the **other phase**.
+Exchange administrator — phase Exchange | `-Mode Apply -Phase Exchange`, same `-SnapshotPath`, `-SelectionPath`, `-Feature`. The trusts and groups created by the Entra phase are read in the tenant: nothing to copy back.
+```
+
+```powershell
+# both administrators: the same configuration and the same Collect folder
+$run = '.\output\contoso.onmicrosoft.com\2026-10-01_101500_Collect'
+
+# Entra administrator (Security Administrator + Groups Administrator) - Microsoft.Graph.Authentication only
+.\Invoke-XTapSharingMigration.ps1 -Mode Plan  -Phase Entra -SnapshotPath $run -UserPrincipalName entra-admin@contoso.com
+.\Invoke-XTapSharingMigration.ps1 -Mode Apply -Phase Entra -SnapshotPath $run -UserPrincipalName entra-admin@contoso.com
+
+# Exchange administrator, afterwards
+.\Invoke-XTapSharingMigration.ps1 -Mode Apply -Phase Exchange -SnapshotPath $run -UserPrincipalName exo-admin@contoso.com
+```
+
+| | |
+|---|---|
+| Accounts | `Authentication.EntraAdmin` and `Authentication.ExchangeAdmin` in the configuration, or `-UserPrincipalName` for one run. The tool stops if another account — or another tenant — signs in. |
+| Entra administrator | No Exchange role and no `ExchangeOnlineManagement` module: Plan and Apply read the snapshot and Microsoft Graph, never Exchange Online. |
+| Same reference | Give `-SnapshotPath` to both. Without it, each run takes the **most recent** Collect of the tenant in its own `output` folder: a Collect run in between changes the reference — `Selection.csv` of the previous collection is then refused and the level questions are asked again. |
+| Same choices | Same configuration, same `-SelectionPath`, same `-Feature`. A level chosen after the hand-over is saved in the copy of the administrator who answered it: copy `LevelChoices.json` back, or work in a shared folder. |
+| Order | Entra, then Exchange. Run first, the Exchange phase still applies the capabilities that need nothing new (partner already trusted, scope *All users* or an existing group); the others are **Blocked** — *run -Phase Entra first* — and the exit code is `2`. Run it again after the Entra phase. |
+| Run again | Any phase, at any time: what is in place shows **No change**. |
 
 ### Choosing a level when Exchange gives several
 
@@ -708,6 +740,8 @@ The tests use a fictitious tenant (`tests\TestData.ps1`: Contoso and its partner
 | `Authentication timed out after 120 seconds` | Device code not completed in time (fixed limit of the Graph module). Run again and complete the sign-in, MFA included, within 2 minutes. |
 | Consent screen at the first sign-in | Normal: delegated permissions of chapter 5 for Microsoft Graph Command Line Tools. Accept for your account, or have an administrator grant them. |
 | `Microsoft Graph is connected to tenant …` | Wrong account: sign out, or set `Authentication.ExchangeAdmin` / `EntraAdmin`. |
+| `Signed in to Microsoft Graph as …, but the configuration expects …` | Another administrator runs this phase: set `Authentication.EntraAdmin` / `ExchangeAdmin`, or add `-UserPrincipalName` (chapter 8, *Two administrators*). |
+| `No Collect run found for this tenant` | Plan or Apply on another computer, or another `Output.Path`: copy the Collect folder and give `-SnapshotPath` (chapter 8, *Two administrators*). |
 | Partner **Blocked**: tenant ID not confirmed | Add the `Partners` entry with the `TenantId` confirmed by the partner (chapter 4). |
 | Partner **Blocked**: MISMATCH | The domain belongs to another tenant than the one given by the partner: check with the partner before going further. |
 | Capability **Conflict** | Existing scope kept (`ExistingCapability = Keep`): set the scope for this item, or choose `Merge` / `Replace`. |
