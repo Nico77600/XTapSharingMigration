@@ -90,7 +90,7 @@
 
 .NOTES
     Author  : Nicolas Fabert
-    Version : 1.0.1
+    Version : 1.0.2
     Exit codes : 0 = success, 1 = failure, 2 = finished with items to look at (blocked, skipped, not verified).
     Documentation : docs\XTapSharingMigration-Guide.md (or .html)
 #>

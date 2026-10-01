@@ -3,7 +3,7 @@
 <#
     X-TAP Sharing Migration - automated tests (Pester 5 or later).
     Author  : Nicolas Fabert
-    Version : 1.0.1
+    Version : 1.0.2
 
     Run:  Invoke-Pester -Path .\tests -Output Detailed
 

@@ -30,7 +30,7 @@
 
 .NOTES
     Author  : Nicolas Fabert
-    Version : 1.0.1
+    Version : 1.0.2
     Part of : X-TAP Sharing Migration (repository tool, not in the package)
 #>
 [CmdletBinding()]

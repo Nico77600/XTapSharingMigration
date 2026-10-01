@@ -2,7 +2,7 @@
 #  X-TAP Sharing Migration - configuration file
 #  --------------------------------------------------------------------------
 #  Author  : Nicolas Fabert
-#  Version : 1.0.1
+#  Version : 1.0.2
 #
 #  Read by Invoke-XTapSharingMigration.ps1. It is a PowerShell data file: text between quotes,
 #  $true / $false, numbers, @( ) for lists and @{ } for groups of settings. Lines starting with # are

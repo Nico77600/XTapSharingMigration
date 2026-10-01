@@ -86,7 +86,7 @@ function New-TestSnapshot {
     & $add 'outlook.com' 'Consumer' '9188040d-6c67-4c5b-b112-36a304b66dad' ''
     $scopeGroup = [ordered]@{ Identity = 'FB-Scope'; Resolved = $true; DisplayName = 'FB-Scope'; PrimarySmtpAddress = 'fb-scope@contoso.com'; ExternalDirectoryObjectId = $TestTenant.FbScopeGroup; RecipientTypeDetails = 'MailUniversalSecurityGroup'; SecurityEnabled = $true; Error = '' }
     [ordered]@{
-        Tool        = [ordered]@{ Name = 'X-TAP Sharing Migration'; Version = '1.0.1' }
+        Tool        = [ordered]@{ Name = 'X-TAP Sharing Migration'; Version = '1.0.2' }
         CollectId   = '2026-10-01_101500'
         CollectedAt = [DateTime]::UtcNow.ToString('o')
         Tenant      = [ordered]@{ TenantId = $TestTenant.Id; Organization = 'contoso.onmicrosoft.com'; DisplayName = 'Contoso'; Cloud = 'microsoftonline.com'; Region = 'EU' }

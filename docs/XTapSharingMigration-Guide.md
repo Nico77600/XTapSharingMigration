@@ -1,7 +1,7 @@
 ---
 title: X-TAP Sharing Migration
 subtitle: Administrator guide
-version: 1.0.1
+version: 1.0.2
 author: Nicolas Fabert
 updated: 2026-10-01
 ---

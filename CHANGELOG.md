@@ -3,7 +3,7 @@
 All notable changes are listed here. Versions follow MAJOR.MINOR.PATCH (see the guide, Annex E).
 Author: Nicolas Fabert.
 
-## [Unreleased]
+## [1.0.2] — 2026-10-01
 
 ### Fixed
 - **Two administrators**: `-Mode Plan -Phase Entra` now expects the `Authentication.EntraAdmin` account (it expected `ExchangeAdmin`, so the Entra administrator was refused without `-UserPrincipalName`), and a level chosen during the Entra phase is recorded in `LevelChoices.json` under the account of that run. One function, `Get-XsmExpectedAccount`, gives the account of every mode and phase.

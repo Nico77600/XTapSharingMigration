@@ -24,7 +24,7 @@
 
 .NOTES
     Author  : Nicolas Fabert
-    Version : 1.0.1
+    Version : 1.0.2
     History : see CHANGELOG.md
 #>
 # Strict mode 1.0: uninitialized variables are errors. Not 'Latest': the tool reads JSON and Graph objects whose
@@ -33,7 +33,7 @@ Set-StrictMode -Version 1.0
 $ErrorActionPreference = 'Stop'
 
 $script:ToolName = 'X-TAP Sharing Migration'
-$script:ToolVersion = '1.0.1'
+$script:ToolVersion = '1.0.2'
 $script:ToolAuthor = 'Nicolas Fabert'
 $script:ToolRoot = $PSScriptRoot
 $script:GraphRoot = 'https://graph.microsoft.com/v1.0'
