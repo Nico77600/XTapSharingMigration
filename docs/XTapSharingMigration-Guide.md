@@ -40,31 +40,42 @@ Sharing Free/Busy, MailTips and calendars with another Microsoft 365 organizatio
 
 Microsoft documents the migration step by step ([Migrate to Microsoft 365 Cross-Tenant Access Policy](https://learn.microsoft.com/exchange/sharing/migrate-to-m365-xtap)). In a real tenant the hard part is not the commands, it is the **inventory**: which relationships are still used, which belong to the Exchange hybrid configuration, which partner hides behind which domain, which sharing policy is assigned to which mailboxes. This tool automates that part and keeps a written trace of every decision.
 
-**Principles**
+**Design principles**
 
-| Principle | What it means |
-|---|---|
-| One tenant per run | The tool configures the tenant set in `Tenant.TenantId`. Each partner runs it (or the Microsoft guide) on its own side. |
-| Exchange Online ↔ Exchange Online only | Only sharing between your Exchange Online and **another Microsoft 365 organization**. Exchange **hybrid** (your own on-premises servers) and partners on **Exchange Server** are listed in the inventory for information, **never configured**, and **cannot be forced** (chapter 3). |
-| Inbound only | X-TAP is an **inbound** control: your tenant decides what the partner can see of **your** users. Two-way sharing needs both sides. |
-| Two phases | **Entra** (trust, groups) and **Exchange** (capabilities) can be run by different administrators, on different days. |
-| Read first | `Collect` and `Plan` change nothing. `Apply` shows the changes and asks for confirmation. |
-| Nothing lost | No delete. A capability configured by hand is **kept** unless you choose otherwise (`Apply.ExistingCapability`). |
-| Graph v1.0 only | Every Microsoft Graph call uses `https://graph.microsoft.com/v1.0`. No beta endpoint, no `Microsoft.Graph.Beta` module. |
-| Manual cutover | The switch from the old objects to X-TAP is coordinated with each partner and done by hand — the tool writes the commands. |
-
+```cards
+globe | One tenant, Exchange Online only | The tool configures the tenant of `Tenant.TenantId`, for its sharing with **other Microsoft 365 organizations**. Exchange hybrid and partners on Exchange Server are listed, never configured. Each partner does its own side.
+split | Two phases, two administrators | **Entra** (trusts, groups) and **Exchange** (capabilities) can be run by different administrators, on different days — or together with `-Phase All`.
+search | Read first | `Collect` and `Plan` change nothing. `Apply` shows every change, asks for a typed confirmation, then reads the tenant again to verify.
+shield | Nothing lost | No delete. A capability configured by hand is **kept** (`Apply.ExistingCapability = Keep`), a trust restricted by hand is never widened. Microsoft Graph **v1.0** only.
+handshake | Partners confirmed | X-TAP is **inbound**: your tenant decides what the partner sees of **your** users. No trust is created for a partner whose tenant ID is not confirmed.
+undo | Manual cutover | Disabling the old objects is coordinated with each partner and done by hand: the reports give the commands, the rollback and the tests.
+```
 <!-- icon: flow -->
 ## 2. How it works
+
+```flow
+settings | Configuration | config\XTapSharingMigration.config.psd1, Selection.csv
+arrow | read by |
+terminal | Invoke-XTapSharingMigration.ps1 | the only script to run: -Mode, -Phase, -Feature
+arrow | reads | read-only
+search | Exchange Online and Microsoft Graph | sharing objects, X-TAP today, tenant of each domain
+arrow | writes | Apply only, one phase at a time
+key | Microsoft 365 X-TAP | trusts and groups (Entra), capabilities (Exchange)
+arrow | reports |
+chart | Reports and files | Inventory, Plan, Result (HTML), Selection.csv, ManualCutover.txt
+```
+
+From the first inventory to the cutover:
 
 ```flow
 search | Collect | read-only inventory
 arrow | review | config or CSV
 target | Plan | target vs tenant
-arrow | Entra admin | phase 1
+arrow | phase 1 | Entra admin
 key | Apply · Entra | groups, trusts
-arrow | Exchange admin | phase 2
+arrow | phase 2 | Exchange admin
 mail | Apply · Exchange | capabilities
-arrow | with the partner | manual
+arrow | manual | with each partner
 undo | Cutover | old objects off
 ```
 
@@ -436,15 +447,18 @@ Each run writes one self-contained HTML file — no external resource, so it can
 
 When `Apply` is finished, X-TAP is **configured but not used**: organization relationships, availability address spaces and sharing policies take precedence over it. What remains is a change, done by hand and coordinated with each partner. The tool prepares it — `ManualCutover.txt`, `PartnersToConfirm.txt`, the reports — but runs none of it.
 
-```steps
-Check the rollout | The X-TAP feature must be available in **your** tenant **and** in the partner's — Message Center and the Exchange team blog.
-Contact the partner | Tenant IDs, what each side configures, the window, the test accounts.
-Plan the window | Date, people, tests, GO / STOP criteria, rollback owner.
-Pre-checks | `Plan` shows **No change**, groups filled, the partner is ready, baseline tests done with the old path.
-Cutover | Both sides disable their old objects in the same window (`ManualCutover.txt`).
-Test | Scheduling Assistant, MailTips, calendar sharing, published calendars — and the `GetSchedule` call in the browser developer tools.
-GO or rollback | Compare with the baseline and the criteria; roll back with the commands of the same file if needed.
-Clean up | After a stable period, remove the old objects, then run `Collect` again.
+```flow
+search | Rollout | both tenants
+arrow | contact | tenant IDs
+handshake | Partner | who configures what
+arrow | plan |
+calendar | Window | tests, GO / STOP
+arrow | both sides |
+undo | Cutover | old objects off
+arrow | test |
+check | GO or rollback | vs the baseline
+arrow | later |
+refresh | Clean up | Collect again
 ```
 
 ### 1 · Is the feature available in both tenants?
@@ -664,6 +678,9 @@ Console style: emoji in Windows Terminal and VS Code, console-font symbols elsew
 | `src\Apply.ps1` | Execution, retries, verification |
 | `src\Report.ps1` | HTML report data, CSV, cutover commands |
 | `templates\Report.template.html` | The report (one file, data embedded as JSON) |
+| `tools\Build-Documentation.ps1` | This guide, Markdown to one HTML file |
+| `tools\New-ReadmeImages.ps1` | The graphics of the GitHub README, from the cards and flows of this guide |
+| `tools\New-XsmPackage.ps1` | The release package |
 
 **Adding a capability** (when Microsoft adds a level): add it to `$script:FeatureCatalog` in `src\Configuration.ps1`, and to `$script:ExchangeLevelMap` if an Exchange value maps to it. Nothing else depends on capability names.
 
@@ -759,5 +776,6 @@ Tests | `Invoke-Pester -Path .\tests` — all green.
 Guide | `.\tools\Build-Documentation.ps1` — rebuilds `docs\XTapSharingMigration-Guide.html`.
 Changelog | Add the version to `CHANGELOG.md`.
 Package | `.\tools\New-XsmPackage.ps1` — copies the files needed to run, configuration emptied, checked free of tenant values.
+README images | `.\tools\New-ReadmeImages.ps1` — after a change of the cards or flows of chapters 1, 2 and 11, or of the version: the banner, principles, how it works and runbook graphics of the README, light and dark.
 Tag | `git tag vX.Y.Z` and publish the zip of the package with the release.
 ```
