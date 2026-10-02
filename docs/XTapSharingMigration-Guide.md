@@ -8,6 +8,17 @@ updated: 2026-10-01
 
 # X-TAP Sharing Migration — Administrator guide
 
+> [!IMPORTANT]
+> Files downloaded from the Internet may be blocked by Windows and fail to run. Before using this project, unblock every file in the downloaded folder:
+>
+> ```powershell
+> Get-ChildItem "C:\Chemin\Du\Dossier" -Recurse -File -Force | Unblock-File
+> ```
+>
+> Replace the example path with the folder where you downloaded or extracted this project.
+>
+> If an `Install-Module` command reports that the module already exists, add `-Force`. If the installed version still conflicts, close PowerShell, run `Uninstall-Module <ModuleName> -AllVersions` if appropriate, then install the required version again.
+
 > Moves cross-tenant **Free/Busy, MailTips and calendar sharing** from Exchange Online organization relationships, sharing policies and availability address spaces to the **Microsoft 365 cross-tenant access policy (X-TAP)** — for **one tenant**, in **two phases** that different administrators can run.
 
 ```cards
@@ -199,8 +210,8 @@ Partners = @(
 | Network | `graph.microsoft.com`, `login.microsoftonline.com`, `outlook.office365.com` |
 
 ```powershell
-Install-Module Microsoft.Graph.Authentication -Scope CurrentUser
-Install-Module ExchangeOnlineManagement -MinimumVersion 3.10.1 -Scope CurrentUser
+Install-Module Microsoft.Graph.Authentication -Scope CurrentUser -Force
+Install-Module ExchangeOnlineManagement -MinimumVersion 3.10.1 -Scope CurrentUser -Force
 ```
 
 ### Roles and permissions
