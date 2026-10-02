@@ -550,15 +550,27 @@ function New-XsmActions {
 }
 
 function Show-XsmActions {
-    <# Console view of the actions, one section per phase. #>
-    param([Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Actions, [string]$Phase = 'All')
-    if (-not $Actions.Count) { Write-XsmItem Info 'Nothing to configure: no item is migrated.'; return }
+    <#
+    .SYNOPSIS
+        Console view of the actions, one section per phase.
+    .PARAMETER Explanations
+        Phase -> Get-XsmPhaseExplanation: shown in place of 'Nothing in this phase' when a phase has no action.
+    #>
+    param([Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Actions, [string]$Phase = 'All', [System.Collections.IDictionary]$Explanations = @{})
+    if (-not $Actions.Count) { Write-XsmItem Info 'Nothing to configure: no item is migrated (reasons at step 2).'; return }
     foreach ($p in 'Entra', 'Exchange') {
         $rows = @($Actions | Where-Object Phase -eq $p)
         $title = if ($p -eq 'Entra') { 'Phase Entra  -  security groups, Microsoft 365 collaboration trust' } else { 'Phase Exchange  -  Free/Busy, MailTips, calendar sharing capabilities' }
         $inPhase = $Phase -in $p, 'All'
         Write-XsmSection ($title + $(if (-not $inPhase) { '   (other phase: shown for information)' })) -Icon $(if ($p -eq 'Entra') { 'Key' } else { 'Exchange' })
-        if (-not $rows.Count) { Write-XsmItem Skip 'Nothing in this phase.' -Indent 8; continue }
+        if (-not $rows.Count) {
+            if ($Explanations.Contains($p)) {
+                foreach ($line in $Explanations[$p].Lines) { Write-XsmItem Info $line -Indent 8 }
+                if ($Explanations[$p].Next) { Write-XsmItem Info "Next: $($Explanations[$p].Next)" -Icon Apply -Indent 8 }
+            }
+            else { Write-XsmItem Skip 'Nothing in this phase.' -Indent 8 }
+            continue
+        }
         $view = foreach ($a in $rows) {
             $status = switch ($a.Operation) { 'NoChange' { 'Skip' } { $_ -in 'Blocked', 'Conflict' } { 'Fail' } default { if ($a.Status -eq 'OtherPhase') { 'Skip' } else { 'Info' } } }
             $icon = switch ($a.Operation) { 'Create' { 'Create' } 'Update' { 'Update' } 'AddMembers' { 'Create' } 'Disable' { 'Update' } 'NoChange' { 'Same' } default { 'Block' } }
@@ -575,13 +587,59 @@ function Get-XsmActionCounts {
     param([AllowEmptyCollection()][object[]]$Actions = @())
     $count = { param($filter) @($Actions | Where-Object $filter).Count }
     [ordered]@{
-        EntraToDo    = & $count { $_.Phase -eq 'Entra' -and $_.Operation -in 'Create', 'Update', 'AddMembers' -and $_.Status -ne 'Blocked' }
-        ExchangeToDo = & $count { $_.Phase -eq 'Exchange' -and $_.Operation -in 'Create', 'Update', 'Disable' -and $_.Status -ne 'Blocked' }
-        InPhaseToDo  = & $count { $_.Status -eq 'ToDo' }
-        NoChange     = & $count { $_.Operation -eq 'NoChange' }
-        Blocked      = & $count { $_.Operation -in 'Blocked', 'Conflict' }
-        Done         = & $count { $_.Status -eq 'Done' }
-        Failed       = & $count { $_.Status -eq 'Failed' }
-        Skipped      = & $count { $_.Status -eq 'Skipped' }
+        EntraToDo       = & $count { $_.Phase -eq 'Entra' -and $_.Operation -in 'Create', 'Update', 'AddMembers' -and $_.Status -ne 'Blocked' }
+        ExchangeToDo    = & $count { $_.Phase -eq 'Exchange' -and $_.Operation -in 'Create', 'Update', 'Disable' -and $_.Status -ne 'Blocked' }
+        InPhaseToDo     = & $count { $_.Status -eq 'ToDo' }
+        NoChange        = & $count { $_.Operation -eq 'NoChange' }
+        NoChangeInPhase = & $count { $_.Operation -eq 'NoChange' -and $_.InPhase }
+        Blocked         = & $count { $_.Operation -in 'Blocked', 'Conflict' }
+        BlockedInPhase  = & $count { $_.Operation -in 'Blocked', 'Conflict' -and $_.InPhase }
+        Done            = & $count { $_.Status -eq 'Done' }
+        Failed          = & $count { $_.Status -eq 'Failed' }
+        Skipped         = & $count { $_.Status -eq 'Skipped' }
     }
+}
+
+function Get-XsmPhaseExplanation {
+    <#
+    .SYNOPSIS
+        Why one phase has nothing to change, in plain words, and what to run next - or $null when the phase
+        has something to change.
+    .OUTPUTS
+        Reason (NoItem | NotNeeded | InPlace | Blocked), Short (one line, summary card), Lines (console and
+        report), Next (command or step to run next, '' when none).
+    #>
+    param([Parameter(Mandatory)]$Target, [AllowEmptyCollection()][object[]]$Actions = @(), [Parameter(Mandatory)][ValidateSet('Entra', 'Exchange')][string]$Phase)
+    $writes = @{ Entra = @('Create', 'Update', 'AddMembers'); Exchange = @('Create', 'Update', 'Disable') }
+    $mine = @($Actions | Where-Object Phase -eq $Phase)
+    if (@($mine | Where-Object { $_.Operation -in $writes[$Phase] }).Count) { return $null }
+    $other = if ($Phase -eq 'Entra') { 'Exchange' } else { 'Entra' }
+    $otherToDo = @($Actions | Where-Object { $_.Phase -eq $other -and $_.Operation -in $writes[$other] }).Count
+    $caps = @($Target.Capabilities)
+    $blocked = @($mine | Where-Object { $_.Operation -in 'Blocked', 'Conflict' })
+    $result = { param($Reason, $Short, $Lines, $Next) [pscustomobject]@{ Phase = $Phase; Reason = $Reason; Short = $Short; Lines = @($Lines); Next = $Next } }
+    $nextOther = if ($otherToDo) { ".\Invoke-XTapSharingMigration.ps1 -Mode Apply -Phase $other   ($otherToDo change(s) in phase $other)" } else { '' }
+
+    if (-not $caps.Count) {
+        return & $result 'NoItem' 'no item is migrated (reasons at step 2)' @('No item is migrated, so there is nothing to configure: the reasons are at step 2 (Building the target configuration).') ''
+    }
+    if ($blocked.Count) {
+        $next = if ($Phase -eq 'Exchange' -and @($blocked | Where-Object { $_.Detail -match 'Phase Entra first' }).Count -and $otherToDo) { ".\Invoke-XTapSharingMigration.ps1 -Mode Apply -Phase Entra first   ($otherToDo change(s))" } else { 'fix the blocked actions (Detail column, Annex A of the guide), then run again' }
+        return & $result 'Blocked' "$($blocked.Count) action(s) blocked or in conflict, nothing else to change" @("Nothing can be changed in phase ${Phase}: $($blocked.Count) action(s) blocked or in conflict (see the Detail of each action).") $next
+    }
+    if ($Phase -eq 'Entra' -and -not $mine.Count) {
+        # No trust and no group: every capability is in the default policy, scoped to All users.
+        $what = @($caps | ForEach-Object { if ($_.Feature -eq 'AnonymousCalendarSharing') { 'anonymous calendar publishing (Anonymous:...)' } else { 'calendar sharing with every external organization (*:...)' } } | Select-Object -Unique)
+        $lines = @(
+            "Nothing to do in Microsoft Entra ID for this migration: the $($caps.Count) capabilit(ies) - $($what -join ', ') - go to the DEFAULT cross-tenant access policy, for All users."
+            'Phase Entra only creates the Microsoft 365 collaboration trust of a named partner tenant (organization relationship, domain entry of a sharing policy) and the security groups used as scopes: Anonymous and * entries of a sharing policy, for All users, need neither.'
+        )
+        return & $result 'NotNeeded' 'not needed - only default-policy capabilities for All users (Anonymous / * sharing entries): no partner trust, no security group' $lines $(if ($nextOther) { "$nextOther - Exchange Administrator" } else { 'nothing to change in phase Exchange either: manual cutover (ManualCutover.txt)' })
+    }
+    if ($Phase -eq 'Entra') {
+        $list = @($mine | ForEach-Object { if ($_.Kind -eq 'Trust') { "trust of $($_.PartnerName)" } else { "group $($_.Target)" } })
+        $text = (@($list | Select-Object -First 5) -join ', ') + $(if ($list.Count -gt 5) { " and $($list.Count - 5) more" } else { '' })
+        return & $result 'InPlace' "already in place - $text" @("Everything phase Entra needs is already in place: $text.") $(if ($nextOther) { $nextOther } else { 'nothing to change in phase Exchange either: manual cutover (ManualCutover.txt)' })
+    }
+    return & $result 'InPlace' "already in place - $($caps.Count) capabilit(ies) configured as planned" @("Every capability is already configured in Microsoft 365 X-TAP as planned ($($caps.Count)).") $(if ($nextOther) { $nextOther } else { 'manual cutover (ManualCutover.txt)' })
 }

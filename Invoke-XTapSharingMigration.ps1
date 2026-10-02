@@ -57,7 +57,8 @@
     tool stops if another account signs in.
 
 .PARAMETER Force
-    Apply: no confirmation prompt (required when the run is not interactive).
+    Apply: no confirmation prompt (required when the run is not interactive). Without it, Apply asks to type
+    YES (any case); any other answer cancels the run and nothing is changed.
 
 .EXAMPLE
     .\Invoke-XTapSharingMigration.ps1
@@ -90,8 +91,9 @@
 
 .NOTES
     Author  : Nicolas Fabert
-    Version : 1.0.2
-    Exit codes : 0 = success, 1 = failure, 2 = finished with items to look at (blocked, skipped, not verified).
+    Version : 1.0.3
+    Exit codes : 0 = success, 1 = failure, 2 = finished with items to look at (blocked, skipped, not verified,
+                 or cancelled at the confirmation).
     Documentation : docs\XTapSharingMigration-Guide.md (or .html)
 #>
 [CmdletBinding()]
@@ -291,8 +293,9 @@ try {
             if ($partners.Count) { Write-XsmItem Ok 'PartnersToConfirm.txt  (Partners entries to paste in the configuration once each partner has confirmed its tenant ID)' -Icon File }
             if ($settings.Collection.BackupExchangeObjects) { Write-XsmItem Ok 'backup\         (organization relationships, sharing policies, address spaces: Export-Clixml)' -Icon Folder }
 
+            $notProposed = Get-XsmNotMigratedSummary -Decisions $proposalEntries
             Write-XsmSummary -Title 'Inventory ready' -Status $(if ($inventory.Errors.Count -or -not $xtap.Readable) { 'Warn' } else { 'Ok' }) -Values ([ordered]@{
-                    Items    = @('Target', "$($proposed.Count) proposed for migration $dot $($items.Count - $inScope.Count) out of scope$(if ($reasons.Count) { " ($($reasons -join ', '))" })")
+                    Items    = @('Target', "$($proposed.Count) proposed for migration $dot $($items.Count - $inScope.Count) out of scope$(if ($reasons.Count) { " ($($reasons -join ', '))" })$(if ($notProposed.Forceable) { " $dot $($notProposed.Forceable) can be forced in Selection.csv ($($notProposed.ForceableText))" })")
                     Partners = @('Partner', "$partnerCount Microsoft 365 tenant(s) in scope$(if ($toConfirm) { " $dot $toConfirm tenant ID(s) to confirm with the partner (PartnersToConfirm.txt)" })")
                     Choices  = @($(if ($conflicts.Count) { 'Question' } else { 'Ok' }), $(if ($conflicts.Count) { "$($conflicts.Count) level choice(s) to make (asked by Plan / Apply)" } else { 'no level to choose' }))
                     'X-TAP'  = @('Graph', $(if ($xtap.Readable) { "$present item(s) already in place" } else { 'not read' }))
@@ -344,6 +347,14 @@ try {
         $migrated = @($target.Decisions | Where-Object { $_.Decision.Include -and -not $_.Decision.Problems.Count })
         $problems = @($target.Decisions | Where-Object { $_.Decision.Include -and $_.Decision.Problems.Count })
         Write-XsmItem Ok ("{0} item(s) migrated of {1}  {2} {3} capabilit(ies), {4} partner(s), {5} security group(s)" -f $migrated.Count, @($target.Decisions).Count, $dot, @($target.Capabilities).Count, @($target.Trusts).Count, @($target.Groups).Count) -Icon Target
+        $notMigrated = Get-XsmNotMigratedSummary -Decisions $target.Decisions
+        if ($notMigrated.Count) {
+            Write-XsmItem Info ("{0} item(s) not migrated  {1} {2}" -f $notMigrated.Count, $dot, $notMigrated.Text)
+            if ($notMigrated.Forceable) {
+                $selectionFile = if ($SelectionPath) { $SelectionPath } else { Join-Path ([string]$snapshot.Directory) 'Selection.csv' }
+                Write-XsmItem Info ("{0} of them can be forced ({1}): Include = Yes in {2}{3}" -f $notMigrated.Forceable, $notMigrated.ForceableText, $selectionFile, $(if ($SelectionPath) { '.' } else { ', then add -SelectionPath.' }))
+            }
+        }
         if ($settings.RunFeatures.Count) {
             $left = @($target.Decisions | Where-Object { $_.Item.Status -eq 'InScope' -and "$($_.Decision.IncludeOrigin)" -like '-Feature*' })
             if ($left.Count) { Write-XsmItem Info ("{0} item(s) in scope left for a later run (-Feature): {1}" -f $left.Count, ((@($left | Group-Object { $_.Item.Feature } | ForEach-Object { "$($_.Name) $($_.Count)" })) -join ', ')) }
@@ -362,17 +373,24 @@ try {
         if ($graph.MissingScopes.Count) { Write-XsmItem Warn "Permissions not granted: $($graph.MissingScopes -join ', ')." }
         $live = Get-XsmLiveState -Target $target -Members:($Phase -in 'Entra', 'All')
         $actions = New-XsmActions -Target $target -Live $live -Settings $settings -Phase $Phase
-        Show-XsmActions -Actions $actions -Phase $Phase
+        # Why a phase has nothing to change (default policy only, already in place, blocked, no item): shown in the console, the summary and the report.
+        $explanations = [ordered]@{}
+        foreach ($p in 'Entra', 'Exchange') { $x = Get-XsmPhaseExplanation -Target $target -Actions $actions -Phase $p; if ($x) { $explanations[$p] = $x } }
+        $runPhases = if ($Phase -eq 'All') { @('Entra', 'Exchange') } else { @($Phase) }
+        Show-XsmActions -Actions $actions -Phase $Phase -Explanations $explanations
         $counts = Get-XsmActionCounts $actions
 
         $runDir = New-XsmRunDirectory -Settings $settings -Name $(if ($Mode -eq 'Plan') { 'Plan' } else { "Apply-$Phase" })
         $cutover = Get-XsmCutover -Snapshot $snapshot -Target $target
         $applied = $false
+        $cancelled = $false; $cancelText = ''; $phaseToDo = 0
         if ($Mode -eq 'Apply') {
             Write-XsmStep 4 $total 'Confirmation' -Icon Lock
             $todo = @($actions | Where-Object Status -eq 'ToDo')
+            $phaseToDo = $todo.Count
             if (-not $todo.Count) {
-                Write-XsmItem Ok "Nothing to change in phase $Phase."
+                $why = @($runPhases | Where-Object { $explanations.Contains($_) } | ForEach-Object { if ($runPhases.Count -gt 1) { "$_ - $($explanations[$_].Short)" } else { $explanations[$_].Short } })
+                Write-XsmItem Ok ("Nothing to change in phase {0}{1}" -f $Phase, $(if ($why.Count) { ": $($why -join '; ')." } else { '.' }))
             } else {
                 $question = "Apply the $($todo.Count) change(s) of phase $Phase to tenant $($settings.Tenant.Organization) $($settings.Tenant.TenantId)?"
                 if (-not $Force) {
@@ -380,7 +398,12 @@ try {
                     Write-Host ''
                     $answer = Read-Host "      $question Type YES to continue"
                     Write-XsmLog 'INFO' "Confirmation answer: $answer"
-                    if ($answer -cne 'YES') { Write-XsmItem Skip 'Cancelled: nothing was changed.'; $todo = @(); foreach ($a in $actions) { if ($a.Status -eq 'ToDo') { $a.Status = 'Skipped'; $a.Error = 'Cancelled at the confirmation.' } } }
+                    if (-not (Test-XsmConfirmation $answer)) {
+                        $cancelled = $true
+                        $cancelText = if ([string]::IsNullOrWhiteSpace($answer)) { 'no answer' } else { "answer '$($answer.Trim())'" }
+                        Write-XsmItem Skip "Cancelled ($cancelText, YES expected): nothing was changed."
+                        $todo = @(); foreach ($a in $actions) { if ($a.Status -eq 'ToDo') { $a.Status = 'Skipped'; $a.Error = 'Cancelled at the confirmation.' } }
+                    }
                 } else { Write-XsmItem Info "-Force: $($todo.Count) change(s) confirmed." }
             }
             Write-XsmStep 5 $total "Applying phase $Phase" -Icon Apply
@@ -415,6 +438,10 @@ try {
         $data.Exchange = $snapshot.Exchange; $data.Sources = $snapshot.Sources
         $data.Xtap = ConvertTo-XsmReportXtap -Live $live -Target $target
         $data.Warnings = @($target.Warnings) + @($problems | ForEach-Object { "$($_.Item.ItemId): $($_.Decision.Problems -join ' ')" }) + @($actions | Where-Object { $_.Operation -in 'Blocked', 'Conflict' } | ForEach-Object { "$($_.Id) $($_.Target): $($_.Detail)" })
+        if ($cancelled) { $data.Warnings = @("Cancelled at the confirmation ($cancelText, YES expected): the $phaseToDo change(s) of phase $Phase were not applied, nothing was changed.") + $data.Warnings }
+        $notePhases = @($(if ($Mode -eq 'Apply') { $runPhases } else { @('Entra', 'Exchange') }) | Where-Object { $explanations.Contains($_) })
+        $data.Notes = @($notePhases | ForEach-Object { $x = $explanations[$_]; $prefix = if ($notePhases.Count -gt 1 -or $Mode -eq 'Plan') { "Phase $($x.Phase) - " } else { '' }; foreach ($line in $x.Lines) { "$prefix$line" }; if ($x.Next) { "${prefix}Next: $($x.Next)" } })
+        $data.NotesTitle = if ($Mode -eq 'Apply') { "Why nothing changed in phase $Phase" } else { 'Phases with nothing to change' }
         $data.Errors = @($actions | Where-Object Status -eq 'Failed' | ForEach-Object { "$($_.Id) $($_.Operation) $($_.Kind) $($_.Target): $($_.Error)" })
         if ($kind -eq 'Plan') {
             $data.Metrics = @(
@@ -425,10 +452,10 @@ try {
             )
         } else {
             $data.Metrics = @(
-                @{ Label = 'Changes done'; Value = $counts.Done; Hint = "phase $Phase, verified: $(@($actions | Where-Object { $_.Verified -like 'Verified*' }).Count)" }
-                @{ Label = 'Already in place'; Value = $counts.NoChange; Hint = 'nothing to change' }
+                @{ Label = 'Changes done'; Value = $counts.Done; Hint = "phase $Phase, verified: $(@($actions | Where-Object { $_.Verified -like 'Verified*' }).Count)$(if ($cancelled) { ' - cancelled at the confirmation' })" }
+                @{ Label = 'Already in place'; Value = $counts.NoChangeInPhase; Hint = "phase $Phase, nothing to change" }
                 @{ Label = 'Other phase'; Value = @($actions | Where-Object Status -eq 'OtherPhase').Count; Hint = 'to be done by the other administrator' }
-                @{ Label = 'Failed / blocked'; Value = ($counts.Failed + $counts.Skipped + $counts.Blocked); Hint = 'see the Actions tab' }
+                @{ Label = 'Failed / blocked'; Value = ($counts.Failed + $counts.Skipped + $counts.BlockedInPhase); Hint = "phase $Phase, see the Actions tab" }
             )
         }
         $baseName = if ($kind -eq 'Plan') { 'Plan' } else { 'Result' }
@@ -440,32 +467,72 @@ try {
         Write-XsmItem Ok "$baseName.html  $dot $baseName.csv  $dot ManualCutover.txt" -Icon File
 
         $notVerified = @($actions | Where-Object { $_.Status -eq 'Done' -and $_.Verified -notlike 'Verified*' }).Count
-        $attention = $counts.Blocked + $problems.Count + $counts.Skipped + $notVerified
+        # Apply: only the blocked actions of the phase that ran need attention; those of the other phase are listed in Other.
+        $blockedCount = if ($kind -eq 'Plan') { $counts.Blocked } else { $counts.BlockedInPhase }
+        $attention = $blockedCount + $problems.Count + $counts.Skipped + $notVerified
+        $itemsText = "$($migrated.Count) migrated of $(@($target.Decisions).Count)$(if ($notMigrated.Count) { " $dot $($notMigrated.Count) not migrated ($($notMigrated.Text))" })$(if ($notMigrated.Forceable) { " $dot $($notMigrated.Forceable) can be forced in Selection.csv" })"
+        $featuresText = if ($settings.RunFeatures.Count) { ($settings.RunFeatures -join ', ') + ' only (-Feature)' } else { 'all the features allowed by the configuration' }
         if ($kind -eq 'Plan') {
+            $phaseText = { param($p, $default) if ($explanations.Contains($p)) { "0 change(s) - $($explanations[$p].Short)" } else { $default } }
+            $planNext = if (-not $explanations.Contains('Entra') -and -not $explanations.Contains('Exchange')) { '-Mode Apply -Phase Entra, then -Mode Apply -Phase Exchange (or -Phase All)' }
+            elseif (-not $explanations.Contains('Exchange')) { '-Mode Apply -Phase Exchange   (nothing to change in phase Entra)' }
+            elseif (-not $explanations.Contains('Entra')) { '-Mode Apply -Phase Entra   (nothing to change in phase Exchange)' }
+            else { 'nothing to apply (reasons above and in Plan.html)' }
             Write-XsmSummary -Title 'Plan ready - nothing was changed' -Status $(if ($attention) { 'Warn' } else { 'Ok' }) -Values ([ordered]@{
-                    Entra     = @('Key', "$($counts.EntraToDo) change(s): security groups, Microsoft 365 collaboration trusts")
-                    Exchange  = @('Exchange', "$($counts.ExchangeToDo) change(s): capabilities")
+                    Items     = @('Target', $itemsText)
+                    Entra     = @('Key', (& $phaseText 'Entra' "$($counts.EntraToDo) change(s): security groups, Microsoft 365 collaboration trusts"))
+                    Exchange  = @('Exchange', (& $phaseText 'Exchange' "$($counts.ExchangeToDo) change(s): capabilities"))
                     'In place' = @('Ok', "$($counts.NoChange) action(s) already in place")
                     Blocked   = @($(if ($attention) { 'Warn' } else { 'Ok' }), "$($counts.Blocked) action(s) blocked, $($problems.Count) item(s) that cannot be migrated")
-                    Features  = @('Calendar', $(if ($settings.RunFeatures.Count) { ($settings.RunFeatures -join ', ') + ' only (-Feature)' } else { 'all the features allowed by the configuration' }))
+                    Features  = @('Calendar', $featuresText)
                     Report    = @('Report', $report)
-                    Next      = @('Apply', '-Mode Apply -Phase Entra, then -Mode Apply -Phase Exchange (or -Phase All)')
+                    Next      = @('Apply', $planNext)
                     Duration  = @('Clock', (Format-XsmDuration $clock.Elapsed.TotalSeconds))
                 })
             $exitCode = if ($attention) { 2 } else { 0 }
         } else {
             $other = @($actions | Where-Object Status -eq 'OtherPhase').Count
+            $otherBlocked = $counts.Blocked - $counts.BlockedInPhase
+            $otherPhase = if ($Phase -eq 'Entra') { 'Exchange' } else { 'Entra' }
+            $otherText = if ($Phase -eq 'All') { 'nothing left for another phase' }
+            elseif ($other -or $otherBlocked) { "phase ${otherPhase}: $other change(s) to do$(if ($otherBlocked) { ", $otherBlocked blocked or in conflict (see the report)" })" }
+            else { 'nothing left for another phase' }
+            if ($cancelled) {
+                Write-XsmSummary -Title "Phase $Phase cancelled - nothing was changed" -Status Warn -Values ([ordered]@{
+                        Cancelled  = @('Skip', "$phaseToDo change(s) not applied: $cancelText, YES expected")
+                        Items      = @('Target', $itemsText)
+                        'In place' = @('Same', "$($counts.NoChangeInPhase) action(s) of phase $Phase already in place")
+                        Other      = @('People', $otherText)
+                        Report     = @('Report', $report)
+                        Next       = @('Apply', 'run the same command again and type YES (or add -Force)')
+                        Duration   = @('Clock', (Format-XsmDuration $clock.Elapsed.TotalSeconds))
+                    })
+                $exitCode = 2
+                break
+            }
             $status = if ($counts.Failed) { 'Fail' } elseif ($attention) { 'Warn' } else { 'Ok' }
-            Write-XsmSummary -Title $(switch ($status) { 'Ok' { "Phase $Phase applied" } 'Warn' { "Phase $Phase applied - with items to look at" } default { "Phase $Phase finished with errors" } }) -Status $status -Values ([ordered]@{
-                    Done      = @('Ok', "$($counts.Done) change(s), $(@($actions | Where-Object { $_.Verified -like 'Verified*' }).Count) verified")
-                    'In place' = @('Same', "$($counts.NoChange) action(s) already in place")
-                    Problems  = @($(if ($counts.Failed) { 'Fail' } elseif ($attention) { 'Warn' } else { 'Ok' }), "$($counts.Failed) failed $dot $($counts.Skipped) skipped $dot $($counts.Blocked) blocked $dot $notVerified not verified")
-                    Other     = @('People', $(if ($other) { "$other action(s) for the other phase ($(if ($Phase -eq 'Entra') { 'Exchange' } else { 'Entra' }))" } else { 'nothing left for another phase' }))
-                    Features  = @('Calendar', $(if ($settings.RunFeatures.Count) { ($settings.RunFeatures -join ', ') + ' only (-Feature)' } else { 'all the features allowed by the configuration' }))
-                    Cutover   = @('Warn', 'manual and coordinated with each partner: see ManualCutover.txt')
-                    Report    = @('Report', $report)
-                    Duration  = @('Clock', (Format-XsmDuration $clock.Elapsed.TotalSeconds))
-                })
+            $title = if ($counts.Failed) { "Phase $Phase finished with errors" }
+            elseif (-not $phaseToDo) { "Phase $Phase - nothing to change$(if ($attention) { ', items to look at' })" }
+            elseif ($attention) { "Phase $Phase applied - with items to look at" }
+            else { "Phase $Phase applied" }
+            $values = [ordered]@{}
+            if (-not $phaseToDo) {
+                $why = @($runPhases | Where-Object { $explanations.Contains($_) })
+                $values.Why = @('Info', $(if ($why.Count) { (@($why | ForEach-Object { if ($runPhases.Count -gt 1) { "$_ - $($explanations[$_].Short)" } else { $explanations[$_].Short } })) -join '; ' } else { 'no action of this phase to change' }))
+            } else {
+                $values.Done = @('Ok', "$($counts.Done) change(s), $(@($actions | Where-Object { $_.Verified -like 'Verified*' }).Count) verified")
+            }
+            $values.Items = @('Target', $itemsText)
+            $values['In place'] = @('Same', "$($counts.NoChangeInPhase) action(s) of phase $Phase already in place")
+            $values.Problems = @($(if ($counts.Failed) { 'Fail' } elseif ($attention) { 'Warn' } else { 'Ok' }), "$($counts.Failed) failed $dot $($counts.Skipped) skipped $dot $blockedCount blocked $dot $notVerified not verified$(if ($problems.Count) { " $dot $($problems.Count) item(s) that cannot be migrated" })")
+            $values.Other = @('People', $otherText)
+            $values.Features = @('Calendar', $featuresText)
+            $values.Cutover = @('Warn', 'manual and coordinated with each partner: see ManualCutover.txt')
+            $values.Report = @('Report', $report)
+            $next = @($runPhases | Where-Object { $explanations.Contains($_) -and $explanations[$_].Next } | ForEach-Object { $explanations[$_].Next } | Select-Object -Unique)
+            if (-not $phaseToDo -and $next.Count) { $values.Next = @('Apply', ($next -join '; ')) }
+            $values.Duration = @('Clock', (Format-XsmDuration $clock.Elapsed.TotalSeconds))
+            Write-XsmSummary -Title $title -Status $status -Values $values
             $exitCode = if ($counts.Failed) { 1 } elseif ($attention) { 2 } else { 0 }
         }
     } while ($false)

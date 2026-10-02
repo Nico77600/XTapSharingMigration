@@ -140,7 +140,7 @@ function Write-XsmBanner {
         Title card at the start of an execution:
 
           ╭──────────────────────────────────────────────────────────────────────────────╮
-          │  🤝  X-TAP Sharing Migration                      v1.0.2 · Nicolas Fabert    │
+          │  🤝  X-TAP Sharing Migration                      v1.0.3 · Nicolas Fabert    │
           │     Free/Busy · MailTips · calendar sharing → Microsoft 365 X-TAP            │
           ╰──────────────────────────────────────────────────────────────────────────────╯
              🎯  Mode        Collect
@@ -245,6 +245,12 @@ function Write-XsmTable {
         $logLevel = @{ Ok = 'OK'; Warn = 'WARN'; Fail = 'ERROR'; Info = 'INFO'; Skip = 'INFO' }[$status]
         Write-XsmLog $logLevel (($Columns | ForEach-Object { $v = $row.($_.Property); if ($v -is [array]) { $v = $v -join ', ' }; "$($_.Name)=$v" }) -join ' | ')
     }
+}
+
+function Test-XsmConfirmation {
+    <# Answer to the Apply confirmation: YES in any case, surrounding spaces ignored. Anything else cancels. #>
+    param([AllowNull()][AllowEmptyString()][string]$Answer)
+    return ([string]$Answer).Trim() -ieq 'YES'
 }
 
 function Write-XsmSummary {

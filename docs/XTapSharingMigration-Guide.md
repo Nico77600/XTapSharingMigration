@@ -1,12 +1,14 @@
 ---
 title: X-TAP Sharing Migration
 subtitle: Administrator guide
-version: 1.0.2
+version: 1.0.3
 author: Nicolas Fabert
-updated: 2026-10-01
+updated: 2026-10-02
 ---
 
 # X-TAP Sharing Migration — Administrator guide
+
+> Moves cross-tenant **Free/Busy, MailTips and calendar sharing** from Exchange Online organization relationships, sharing policies and availability address spaces to the **Microsoft 365 cross-tenant access policy (X-TAP)** — for **one tenant**, in **two phases** that different administrators can run.
 
 > [!IMPORTANT]
 > Files downloaded from the Internet may be blocked by Windows and fail to run. Before using this project, unblock every file in the downloaded folder:
@@ -17,9 +19,7 @@ updated: 2026-10-01
 >
 > Replace the example path with the folder where you downloaded or extracted this project.
 >
-> If an `Install-Module` command reports that the module already exists, add `-Force`. If the installed version still conflicts, close PowerShell, run `Uninstall-Module <ModuleName> -AllVersions` if appropriate, then install the required version again.
-
-> Moves cross-tenant **Free/Busy, MailTips and calendar sharing** from Exchange Online organization relationships, sharing policies and availability address spaces to the **Microsoft 365 cross-tenant access policy (X-TAP)** — for **one tenant**, in **two phases** that different administrators can run.
+> The `Install-Module` commands in this documentation use `-Force`, so they also update or reinstall a module that is already installed. If an older version still conflicts, close every PowerShell window, open a new one (as administrator for `-Scope AllUsers`), run `Uninstall-Module <ModuleName> -AllVersions -Force`, then run the `Install-Module` command again.
 
 ```cards
 search | What it reads | The Exchange Online sharing configuration and the current Microsoft 365 X-TAP of the tenant — **read-only**.
@@ -98,6 +98,9 @@ undo | Cutover | old objects off
 | **Apply -Phase Exchange** | same as Plan | Microsoft 365 capabilities in the partner policies and the default policy | same |
 
 Every run writes into `output\<tenant>\<date>_<mode>`. Plan and Apply use the most recent Collect of the tenant unless `-SnapshotPath` is given.
+
+> [!NOTE]
+> **When phase Entra has nothing to do.** A trust is needed only for a **named partner tenant** — an organization relationship, an availability address space forced in, or a `domain:` entry of a sharing policy — and a security group only for a scope other than *All users*. The **Anonymous** (`Anonymous:…`) and **all organizations** (`*:…`) entries of a sharing policy go to the **default policy**: with a single sharing policy in use, they are scoped to *All users* and need neither. Phase Entra then ends with **Phase Entra - nothing to change**, the reason (*not needed - only default-policy capabilities for All users*) and the next command, `-Mode Apply -Phase Exchange`. Several sharing policies in use still need one group per policy (chapter 3).
 
 ![The inventory in the console](images/console-collect.png)
 
@@ -359,7 +362,7 @@ Groups = @{
 Inventory | `.\Invoke-XTapSharingMigration.ps1` (Exchange administrator). Two sign-ins: Microsoft Graph, then Exchange Online. Open `Inventory.html`: this is the **initial picture**, keep it with the change record.
 Decide | Accept the proposal, or adjust the `Features`, `Partners` and `Groups` rules, or complete `Selection.csv` of the run (chapter 9). Confirm the tenant ID of every partner (`PartnersToConfirm.txt`).
 Plan | `.\Invoke-XTapSharingMigration.ps1 -Mode Plan [-SelectionPath …\Selection.csv]`. Check every action, every **Blocked** and **Conflict**, the notes. Run it again after each change of the configuration.
-Phase Entra | `.\Invoke-XTapSharingMigration.ps1 -Mode Apply -Phase Entra` (Security / Groups Administrator). Type `YES` to confirm. `Result.html` shows what was created, verified by reading the tenant again.
+Phase Entra | `.\Invoke-XTapSharingMigration.ps1 -Mode Apply -Phase Entra` (Security / Groups Administrator). Type `YES` (any case) to confirm: any other answer cancels and changes nothing. `Result.html` shows what was created, verified by reading the tenant again. **Nothing to change** is normal when only Anonymous / `*` sharing entries are migrated for All users, or when the trusts and groups already exist: the summary gives the reason (*Why*) and the next command.
 Phase Exchange | `.\Invoke-XTapSharingMigration.ps1 -Mode Apply -Phase Exchange` (Exchange Administrator). Capabilities that need a group or a trust not yet created are **Blocked** until the Entra phase is done.
 Cutover | With each partner, in the same window: run the commands of `ManualCutover.txt`, test (chapter 11), keep the rollback at hand.
 Clean up | After validation, remove the old objects (commands in the same file) and collect again: the inventory shows what remains.
@@ -690,7 +693,7 @@ Then run the **cleanup** commands of `ManualCutover.txt` — `Remove-Organizatio
 |---|---|
 | `0` | Success |
 | `1` | Failure (error, or an action failed) |
-| `2` | Finished with points to look at: blocked items, skipped or unverified actions, Graph not read during Collect |
+| `2` | Finished with points to look at: blocked items, skipped or unverified actions, Apply cancelled at the confirmation, Graph not read during Collect |
 
 | File | Content |
 |---|---|
@@ -733,7 +736,7 @@ Console style: emoji in Windows Terminal and VS Code, console-font symbols elsew
 ## 14. Testing a change
 
 ```powershell
-Invoke-Pester -Path .\tests -Output Detailed     # 46 tests, no connection to Microsoft 365
+Invoke-Pester -Path .\tests -Output Detailed     # 50 tests, no connection to Microsoft 365
 .\tests\New-DemoReports.ps1                      # the three reports from the simulated tenant
 ```
 
@@ -753,6 +756,9 @@ The tests use a fictitious tenant (`tests\TestData.ps1`: Contoso and its partner
 | `Microsoft Graph is connected to tenant …` | Wrong account: sign out, or set `Authentication.ExchangeAdmin` / `EntraAdmin`. |
 | `Signed in to Microsoft Graph as …, but the configuration expects …` | Another administrator runs this phase: set `Authentication.EntraAdmin` / `ExchangeAdmin`, or add `-UserPrincipalName` (chapter 8, *Two administrators*). |
 | `No Collect run found for this tenant` | Plan or Apply on another computer, or another `Output.Path`: copy the Collect folder and give `-SnapshotPath` (chapter 8, *Two administrators*). |
+| `0 item(s) migrated` — *No change made* | Step 2 of Plan / Apply and the summary give the reason of every item not migrated. A relationship or a sharing policy **disabled** in Exchange Online (for example by an earlier cutover) is out of scope: re-enable it (rollback) and collect again, or force it in `Selection.csv` with `-SelectionPath` (chapter 9). Hybrid, on-premises and domains without a tenant cannot be forced. |
+| *Cancelled (answer …, YES expected)* | Any answer other than `YES` (any case) cancels the Apply: nothing is changed, the summary says *cancelled*, exit code `2`. Run again and type `YES`, or add `-Force`. |
+| **Phase Entra - nothing to change** | Read the *Why* line. *Not needed*: only Anonymous / `*` sharing policy entries for All users are migrated — they go to the default policy, no trust and no group are needed (chapter 2): run `-Phase Exchange`. *Already in place*: the trusts and groups exist. *No item is migrated*: see the line above. Exit code `0`. |
 | Partner **Blocked**: tenant ID not confirmed | Add the `Partners` entry with the `TenantId` confirmed by the partner (chapter 4). |
 | Partner **Blocked**: MISMATCH | The domain belongs to another tenant than the one given by the partner: check with the partner before going further. |
 | Capability **Conflict** | Existing scope kept (`ExistingCapability = Keep`): set the scope for this item, or choose `Merge` / `Replace`. |

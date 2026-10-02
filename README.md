@@ -5,6 +5,15 @@
   </picture>
 </p>
 
+<p align="center">
+  <a href="#how-it-works"><b>How it works</b></a> &nbsp;&middot;&nbsp;
+  <a href="#what-is-migrated"><b>What is migrated</b></a> &nbsp;&middot;&nbsp;
+  <a href="#from-inventory-to-cutover"><b>From inventory to cutover</b></a> &nbsp;&middot;&nbsp;
+  <a href="#reports"><b>Reports</b></a> &nbsp;&middot;&nbsp;
+  <a href="#quick-start"><b>Quick start</b></a> &nbsp;&middot;&nbsp;
+  <a href="docs/XTapSharingMigration-Guide.md"><b>Administrator guide</b></a>
+</p>
+
 > [!IMPORTANT]
 > Files downloaded from the Internet may be blocked by Windows and fail to run. Before using this project, unblock every file in the downloaded folder:
 >
@@ -14,16 +23,7 @@
 >
 > Replace the example path with the folder where you downloaded or extracted this project.
 >
-> If an `Install-Module` command reports that the module already exists, add `-Force`. If the installed version still conflicts, close PowerShell, run `Uninstall-Module <ModuleName> -AllVersions` if appropriate, then install the required version again.
-
-<p align="center">
-  <a href="#how-it-works"><b>How it works</b></a> &nbsp;&middot;&nbsp;
-  <a href="#what-is-migrated"><b>What is migrated</b></a> &nbsp;&middot;&nbsp;
-  <a href="#from-inventory-to-cutover"><b>From inventory to cutover</b></a> &nbsp;&middot;&nbsp;
-  <a href="#reports"><b>Reports</b></a> &nbsp;&middot;&nbsp;
-  <a href="#quick-start"><b>Quick start</b></a> &nbsp;&middot;&nbsp;
-  <a href="docs/XTapSharingMigration-Guide.md"><b>Administrator guide</b></a>
-</p>
+> The `Install-Module` commands in this documentation use `-Force`, so they also update or reinstall a module that is already installed. If an older version still conflicts, close every PowerShell window, open a new one (as administrator for `-Scope AllUsers`), run `Uninstall-Module <ModuleName> -AllVersions -Force`, then run the `Install-Module` command again.
 
 ## Why
 
@@ -91,7 +91,7 @@ Every report is a self-contained HTML file — light and dark themes, search and
 | PowerShell | 7.4 or later |
 | Modules | `Microsoft.Graph.Authentication` 2.25+ for every run; `ExchangeOnlineManagement` 3.9+ for Collect only |
 | Collect / Plan | Read only — Exchange role that can read the configuration; Graph `Policy.Read.All`, `CrossTenantInformation.ReadBasic.All`, `Group.Read.All` |
-| Phase Entra | Creates the trusts and groups — Security Administrator (+ Groups Administrator) or Global Administrator; no Exchange role |
+| Phase Entra | Creates the trusts and groups — Security Administrator (+ Groups Administrator) or Global Administrator; no Exchange role. Nothing to do when only Anonymous / `*` sharing entries are migrated for All users: the summary says why |
 | Phase Exchange | Writes the capabilities — Exchange Administrator or Global Administrator |
 
 ## Quick start

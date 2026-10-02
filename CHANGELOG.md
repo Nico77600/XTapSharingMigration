@@ -3,6 +3,24 @@
 All notable changes are listed here. Versions follow MAJOR.MINOR.PATCH (see the guide, Annex E).
 Author: Nicolas Fabert.
 
+## [1.0.3] — 2026-10-02
+
+### Fixed
+- **Apply confirmation**: `YES` is accepted in any case (`yes`, `Yes`), spaces ignored. Any other answer still cancels, but the console now says which answer was refused and that `YES` was expected, and the summary card is titled **Phase … cancelled - nothing was changed** with the changes not applied and the command to run again (it said *Phase … applied - with items to look at*). The cancellation is also the first warning of `Result.html`. Exit code `2`, as before.
+- The **In place** line of an Apply summary, and the *Already in place* figure of `Result.html`, count the actions of the phase that ran only (an Exchange capability already in place was counted in the Entra phase).
+
+### Added
+- **Why a phase has nothing to change**: when an Apply (or one phase of a Plan) has nothing to change, the console, the summary card (*Why* and *Next* lines) and `Result.html` say why, in plain words: *not needed* (only Anonymous / `*` sharing policy entries for All users: they go to the default policy, so phase Entra needs no partner trust and no security group - run `-Phase Exchange`), *already in place* (the trusts, groups or capabilities, by name), *blocked* (with the next step, for example `-Phase Entra first`) or *no item is migrated*. The phase section of the console gives the same explanation instead of *Nothing in this phase*, and the Plan summary gives the next command that has something to do. An Apply with nothing to do is titled **Phase … - nothing to change**.
+- **Why nothing is migrated**: step 2 of Plan and Apply gives the number of items not migrated and their reasons (out of scope: Hybrid, Disabled, TenantNotFound …; `Include = No` in `Selection.csv`; a `Features` or `Partners` rule; `-Feature`), and how many of them `Selection.csv` can force (Disabled, Unused, PartnerSide), with the path of the file. The same line is in the summary card (Plan, Apply), and Collect gives the count that can be forced.
+- Guide: a note in chapter 2 (*When phase Entra has nothing to do*), the Phase Entra step of chapter 8, three rows in Annex A (*0 item(s) migrated*, *Cancelled … YES expected*, *Phase Entra - nothing to change*); exit code `2` also covers a cancelled Apply.
+- 50 Pester tests.
+
+### Changed
+- An Apply counts as its own problems only the blocked actions **of its phase**: an Exchange capability in conflict no longer turns an Entra phase into *applied - with items to look at* (exit code `2`); it is listed on the *Other* line (*phase Exchange: 5 change(s) to do, 1 blocked or in conflict*).
+
+### Documentation
+- README and guide: the `Install-Module` commands use `-Force`, with what to do when an older version still conflicts; the README links and the guide summary come before the download note.
+
 ## [1.0.2] — 2026-10-01
 
 ### Fixed

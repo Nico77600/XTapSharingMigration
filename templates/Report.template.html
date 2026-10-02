@@ -2,7 +2,7 @@
 <!--
     X-TAP Sharing Migration - HTML report template
     Author  : Nicolas Fabert
-    Version : 1.0.1
+    Version : 1.0.3
     The tool copies this file and replaces the data marker (in the script element with id "xsm-data",
     near the end of the body) by the report data as JSON. Everything else is static: edit texts,
     colours or columns here, no rebuild needed. No external resource is used: the file works offline,
@@ -263,6 +263,7 @@ $("#metrics").append(...arr(DATA.Metrics).map((m, i) => el("article", { class: "
 const callouts = $("#callouts");
 const addCallout = (cls, title, lines) => { const l = arr(lines).filter(Boolean); if (!l.length && !title) return; callouts.append(el("div", { class: "callout " + cls }, el("strong", { text: title }), l.length ? el("ul", {}, l.map(x => el("li", { text: x }))) : null)); };
 if (DATA.Errors && arr(DATA.Errors).length) addCallout("bad", "Errors", DATA.Errors);
+if (arr(DATA.Notes).length) addCallout("info", DATA.NotesTitle || "Nothing to change", DATA.Notes);
 if (arr(DATA.Conflicts).length) addCallout("warn", "Choices to make", arr(DATA.Conflicts).map(c => `${c.PartnerName} \u2014 ${featureText(c.Feature)}: ${arr(c.Options).map(o => `${o.Level} (${arr(o.Sources).join(", ")})`).join(" / ")}. Plan and Apply ask which level to keep (recorded in LevelChoices.json).`));
 if (DATA.Warnings && arr(DATA.Warnings).filter(w => !String(w).startsWith("Choice needed")).length) addCallout("warn", "Warnings", arr(DATA.Warnings).filter(w => !String(w).startsWith("Choice needed")));
 if (kind === "Collect") addCallout("ok", "Read-only inventory", ["This report is the picture of the configuration found. The tool changed nothing in Exchange Online or Microsoft Entra.", "Next: review the items, adjust the configuration file or Selection.csv if needed, then run the plan (see the Next steps tab)."]);

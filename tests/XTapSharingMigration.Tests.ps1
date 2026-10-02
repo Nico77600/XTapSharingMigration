@@ -3,7 +3,7 @@
 <#
     X-TAP Sharing Migration - automated tests (Pester 5 or later).
     Author  : Nicolas Fabert
-    Version : 1.0.2
+    Version : 1.0.3
 
     Run:  Invoke-Pester -Path .\tests -Output Detailed
 
@@ -255,6 +255,30 @@ Describe 'Decisions and Selection.csv' {
         $rows | Export-Csv $csv -Delimiter ';' -NoTypeInformation
         (Import-XsmSelection -Path $csv -Snapshot $script:Snap).Errors.Count | Should -BeGreaterThan 0
     }
+    It 'explains why items are not migrated and which ones Selection.csv can force' {
+        $sum = Get-XsmNotMigratedSummary -Decisions (New-XsmTargetState -Snapshot $script:Snap -Settings $script:Settings).Decisions
+        $sum.Count | Should -Be 10
+        $sum.Text | Should -Be 'out of scope: Hybrid 3, Disabled 2, Consumer 1, OnPremises 1, PartnerSide 1, TenantNotFound 1, Unused 1'
+        $sum.Forceable | Should -Be 4
+        $sum.ForceableText | Should -Be 'Disabled 2, PartnerSide 1, Unused 1'
+        # A configuration rule and -Feature are reasons too; an item left out by -Feature is not offered for forcing.
+        $s = Set-TestSettings { param($s) $s.Features.MailTips.Migrate = $false; $s.RunFeatures = @('FreeBusy', 'MailTips') }
+        $sum = Get-XsmNotMigratedSummary -Decisions (New-XsmTargetState -Snapshot $script:Snap -Settings $s).Decisions
+        $sum.Count | Should -Be 15
+        $sum.Text | Should -Match 'Features\.MailTips\.Migrate = \$false 1; not in this run \(-Feature\) 7$'
+        $sum.ForceableText | Should -Be 'Disabled 1, PartnerSide 1'
+        # With Selection.csv, the file decides.
+        $csv = Join-Path $script:Work 'Selection-why.csv'
+        Export-XsmSelection -Items @($script:Snap.Items) -Settings $script:Settings -Path $csv -CollectId $script:Snap.CollectId
+        $rows = Import-Csv $csv -Delimiter ';'
+        foreach ($r in $rows) { if ($r.ItemId -eq 'OR02-FB') { $r.Include = 'No' }; if ($r.ItemId -eq 'OR04-FB') { $r.Include = 'Yes' } }
+        $rows | Export-Csv $csv -Delimiter ';' -NoTypeInformation
+        $sel = Import-XsmSelection -Path $csv -Snapshot $script:Snap
+        $sum = Get-XsmNotMigratedSummary -Decisions (New-XsmTargetState -Snapshot $script:Snap -Settings $script:Settings -Selection $sel).Decisions
+        $sum.Text | Should -Be 'Include = No in Selection.csv 10'
+        $sum.ForceableText | Should -Be 'Disabled 1, PartnerSide 1, Unused 1'
+        (Get-XsmNotMigratedSummary -Decisions @()).Count | Should -Be 0
+    }
 }
 
 Describe 'Target configuration' {
@@ -337,6 +361,10 @@ Describe 'Plan and apply against an in-memory tenant' {
         $fb.Operation | Should -Be 'Create'
         $fb.Notes -join ' ' | Should -Match 'crossTenantCalendarAvailabilityBasic is also allowed'
         @($actions | Where-Object { $_.Kind -eq 'Group' }).Operation | Should -Contain 'Create'
+        # An Apply of phase Entra does not count the Exchange conflict as its own problem.
+        $c = Get-XsmActionCounts (New-XsmActions -Target $script:Target -Live $live -Settings $script:Settings -Phase Entra)
+        $c.Blocked | Should -BeGreaterThan 0
+        $c.BlockedInPhase | Should -Be 0
     }
     It 'blocks the Exchange phase until the Entra phase is done' {
         $live = Get-XsmLiveState -Target $script:Target
@@ -368,6 +396,50 @@ Describe 'Plan and apply against an in-memory tenant' {
         $cap = $script:Fake.Default.Caps['crossTenantCalendarSharingFreeBusyReviewer']
         $cap.inboundAccess.resourceScopes.included[0].resourceId | Should -Be $vipGroup.id
         $script:Fake.Calls | Where-Object { $_ -match 'beta' } | Should -BeNullOrEmpty
+        # The summary of an Apply counts what is already in place in its own phase only.
+        $entra = New-XsmActions -Target $script:Target -Live (Get-XsmLiveState -Target $script:Target -Members) -Settings $s -Phase Entra
+        $counts = Get-XsmActionCounts $entra
+        $counts.NoChange | Should -Be $entra.Count
+        $counts.NoChangeInPhase | Should -Be @($entra | Where-Object Phase -eq 'Entra').Count
+        $counts.NoChangeInPhase | Should -BeLessThan $counts.NoChange
+        # Everything in place: each phase says so, by name.
+        $x = Get-XsmPhaseExplanation -Target $script:Target -Actions $entra -Phase Entra
+        $x.Reason | Should -Be 'InPlace'
+        $x.Short | Should -Match 'trust of Northwind Traders'
+        (Get-XsmPhaseExplanation -Target $script:Target -Actions $entra -Phase Exchange).Reason | Should -Be 'InPlace'
+    }
+    It 'explains why a phase has nothing to change' {
+        # Only the Anonymous and * entries of the default sharing policy, for All users: no trust, no group.
+        $csv = Join-Path $script:Work 'Selection-default.csv'
+        Export-XsmSelection -Items @($script:Snap.Items) -Settings $script:Settings -Path $csv -CollectId $script:Snap.CollectId
+        $rows = Import-Csv $csv -Delimiter ';'
+        foreach ($r in $rows) { $r.Include = $(if ($r.ItemId -in 'SP01-01', 'SP01-02') { 'Yes' } else { 'No' }); if ($r.ItemId -in 'SP01-01', 'SP01-02') { $r.Scope = 'All' } }
+        $rows | Export-Csv $csv -Delimiter ';' -NoTypeInformation
+        $target = New-XsmTargetState -Snapshot $script:Snap -Settings $script:Settings -Selection (Import-XsmSelection -Path $csv -Snapshot $script:Snap)
+        @($target.Trusts).Count | Should -Be 0
+        @($target.Groups).Count | Should -Be 0
+        $actions = New-XsmActions -Target $target -Live (Get-XsmLiveState -Target $target -Members) -Settings $script:Settings -Phase Entra
+        @($actions | Where-Object Phase -eq 'Entra').Count | Should -Be 0
+        $x = Get-XsmPhaseExplanation -Target $target -Actions $actions -Phase Entra
+        $x.Reason | Should -Be 'NotNeeded'
+        $x.Lines -join ' ' | Should -Match 'DEFAULT cross-tenant access policy'
+        $x.Lines -join ' ' | Should -Match 'anonymous calendar publishing'
+        $x.Lines -join ' ' | Should -Match 'every external organization'
+        $x.Next | Should -Match '-Phase Exchange'
+        Get-XsmPhaseExplanation -Target $target -Actions $actions -Phase Exchange | Should -BeNullOrEmpty
+        # No item at all.
+        foreach ($r in $rows) { $r.Include = 'No' }
+        $rows | Export-Csv $csv -Delimiter ';' -NoTypeInformation
+        $none = New-XsmTargetState -Snapshot $script:Snap -Settings $script:Settings -Selection (Import-XsmSelection -Path $csv -Snapshot $script:Snap)
+        (Get-XsmPhaseExplanation -Target $none -Actions @() -Phase Entra).Reason | Should -Be 'NoItem'
+        # Phase Exchange run first: the capabilities that wait for the Entra phase are blocked, and the next step says so.
+        $live = Get-XsmLiveState -Target $script:Target
+        $exo = New-XsmActions -Target $script:Target -Live $live -Settings $script:Settings -Phase Exchange
+        foreach ($a in $exo) { if ($a.Phase -eq 'Exchange' -and $a.Operation -ne 'Blocked') { $a.Operation = 'NoChange' } }
+        $x = Get-XsmPhaseExplanation -Target $script:Target -Actions $exo -Phase Exchange
+        $x.Reason | Should -Be 'Blocked'
+        $x.Next | Should -Match '-Phase Entra first'
+        Get-XsmPhaseExplanation -Target $script:Target -Actions $exo -Phase Entra | Should -BeNullOrEmpty
     }
     It 'adds the missing members of a sharing policy group without removing any' {
         $live = Get-XsmLiveState -Target $script:Target -Members
@@ -627,5 +699,9 @@ Describe 'Safety' {
                 }
             }
         }
+    }
+    It 'applies only after YES, in any case; any other answer cancels' {
+        foreach ($answer in 'YES', 'yes', 'Yes', '  yes ') { Test-XsmConfirmation $answer | Should -BeTrue -Because "'$answer' confirms" }
+        foreach ($answer in '', $null, 'y', 'no', 'oui', 'YES!', 'yes please') { Test-XsmConfirmation $answer | Should -BeFalse -Because "'$answer' cancels" }
     }
 }

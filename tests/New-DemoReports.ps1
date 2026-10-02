@@ -88,9 +88,9 @@ function New-DemoReport([string]$Kind, [string]$Phase, [object[]]$Actions, $Live
             @{ Label = 'Blocked'; Value = $c.Blocked; Hint = 'actions blocked or items that cannot be migrated' })
     } else {
         @(@{ Label = 'Changes done'; Value = $c.Done; Hint = "phase $Phase, verified: $(@($Actions | Where-Object { $_.Verified -like 'Verified*' }).Count)" }
-            @{ Label = 'Already in place'; Value = $c.NoChange; Hint = 'nothing to change' }
+            @{ Label = 'Already in place'; Value = $c.NoChangeInPhase; Hint = "phase $Phase, nothing to change" }
             @{ Label = 'Other phase'; Value = @($Actions | Where-Object Status -eq 'OtherPhase').Count; Hint = 'to be done by the other administrator' }
-            @{ Label = 'Failed / blocked'; Value = ($c.Failed + $c.Skipped + $c.Blocked); Hint = 'see the Actions tab' })
+            @{ Label = 'Failed / blocked'; Value = ($c.Failed + $c.Skipped + $c.BlockedInPhase); Hint = "phase $Phase, see the Actions tab" })
     }
     New-XsmHtmlReport -Data $d -Path (Join-Path $OutputPath $File)
 }
