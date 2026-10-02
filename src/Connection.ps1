@@ -19,8 +19,8 @@ $script:ExoKnownIssues = @{
     '3.10.0' = @{ Modes = @('Certificate'); Issue = 'its certificate authentication fails with "Object reference not set to an instance of an object" (fixed in 3.10.1)' }
 }
 $script:ModuleRequirements = @{
-    ExchangeOnlineManagement         = @{ Minimum = [version]'3.9.0'; Install = 'Install-Module ExchangeOnlineManagement -MinimumVersion 3.10.1 -Scope CurrentUser' }
-    'Microsoft.Graph.Authentication' = @{ Minimum = [version]'2.25.0'; Install = 'Install-Module Microsoft.Graph.Authentication -Scope CurrentUser' }
+    ExchangeOnlineManagement         = @{ Minimum = [version]'3.9.0'; Install = 'Install-Module ExchangeOnlineManagement -MinimumVersion 3.10.1 -Scope CurrentUser -Force' }
+    'Microsoft.Graph.Authentication' = @{ Minimum = [version]'2.25.0'; Install = 'Install-Module Microsoft.Graph.Authentication -Scope CurrentUser -Force' }
 }
 $script:GraphInvoker = $null
 $script:ConsumerTenantId = '9188040d-6c67-4c5b-b112-36a304b66dad'
