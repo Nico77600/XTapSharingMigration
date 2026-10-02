@@ -114,6 +114,47 @@ function Get-XsmItemDecision {
     return $d
 }
 
+function Get-XsmNotMigratedSummary {
+    <#
+    .SYNOPSIS
+        Why items are not migrated, for the console and the summary card: the count per reason, and the
+        items out of scope that Selection.csv can force (Disabled, Unused, PartnerSide).
+    .PARAMETER Decisions
+        Entries @{ Item; Decision } (New-XsmTargetState). An item included but with a problem is counted
+        in Problems only: the caller lists it with its problem.
+    .OUTPUTS
+        Count, Text (for example 'out of scope: Hybrid 6, Disabled 3; Include = No in Selection.csv 1'),
+        Problems, Forceable, ForceableText (for example 'Disabled 3').
+    #>
+    param([AllowEmptyCollection()][object[]]$Decisions = @())
+    $outOfScope = [ordered]@{}; $other = [ordered]@{}; $forceable = [ordered]@{}
+    $count = 0; $problems = 0
+    foreach ($entry in $Decisions) {
+        $item = $entry.Item; $d = $entry.Decision
+        if ($d.Include) { if (@($d.Problems).Count) { $problems++ }; continue }
+        $count++
+        $origin = [string]$d.IncludeOrigin
+        $reason = [string]$item.Reason
+        $outside = [string]$item.Status -ne 'InScope'
+        if ($origin -like '-Feature*') { $other['not in this run (-Feature)'] = 1 + [int]$other['not in this run (-Feature)'] }
+        elseif ($origin -like 'Selection.csv*') { $other['Include = No in Selection.csv'] = 1 + [int]$other['Include = No in Selection.csv'] }
+        elseif ($outside) { $outOfScope[$reason] = 1 + [int]$outOfScope[$reason] }
+        else { $other[$origin] = 1 + [int]$other[$origin] }
+        if ($outside -and $item.Overridable -and $origin -notlike '-Feature*') { $forceable[$reason] = 1 + [int]$forceable[$reason] }
+    }
+    $format = { param($Counts) @($Counts.Keys | Sort-Object @{ Expression = { $Counts[$_] }; Descending = $true }, @{ Expression = { $_ } } | ForEach-Object { "$_ $($Counts[$_])" }) -join ', ' }
+    $parts = @()
+    if ($outOfScope.Count) { $parts += "out of scope: $(& $format $outOfScope)" }
+    foreach ($k in $other.Keys) { $parts += "$k $($other[$k])" }
+    [pscustomobject]@{
+        Count         = $count
+        Text          = $parts -join '; '
+        Problems      = $problems
+        Forceable     = [int](@($forceable.Values) | Measure-Object -Sum).Sum
+        ForceableText = & $format $forceable
+    }
+}
+
 function Export-XsmSelection {
     <# Writes Selection.csv: one row per item, Include pre-filled, Level and Scope empty (= proposal). #>
     param([Parameter(Mandatory)][object[]]$Items, [Parameter(Mandatory)]$Settings, [Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][string]$CollectId)

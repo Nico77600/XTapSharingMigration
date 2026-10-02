@@ -8,7 +8,7 @@
 #
 @{
     RootModule        = 'XTapSharingMigration.psm1'
-    ModuleVersion     = '1.0.2'
+    ModuleVersion     = '1.0.3'
     GUID              = '4f0c7b0e-3a5d-4b8e-9d6f-2c1a7e5b9a31'
     Author            = 'Nicolas Fabert'
     Description       = 'X-TAP Sharing Migration: inventories Exchange Online organization relationships, sharing policies and availability address spaces, and configures the equivalent Microsoft 365 cross-tenant access policy (Free/Busy, MailTips, calendar sharing) in two phases, Entra and Exchange.'
@@ -18,12 +18,12 @@
     # to the module (the tests reach them with InModuleScope).
     FunctionsToExport = @(
         'Import-XsmConfiguration', 'ConvertTo-XsmScopeSpec', 'Format-XsmScope', 'Get-XsmCapabilityName'
-        'Start-XsmLog', 'Stop-XsmLog', 'Write-XsmLog', 'Write-XsmBanner', 'Write-XsmStep', 'Write-XsmSection', 'Write-XsmItem', 'Write-XsmTable', 'Write-XsmSummary', 'Format-XsmDuration'
+        'Start-XsmLog', 'Stop-XsmLog', 'Write-XsmLog', 'Write-XsmBanner', 'Write-XsmStep', 'Write-XsmSection', 'Write-XsmItem', 'Write-XsmTable', 'Write-XsmSummary', 'Format-XsmDuration', 'Test-XsmConfirmation'
         'Import-XsmModules', 'Connect-XsmExchange', 'Disconnect-XsmExchange', 'Connect-XsmGraph', 'Disconnect-XsmGraph', 'Get-XsmGraphScopes', 'Get-XsmExpectedAccount'
         'New-XsmRunDirectory', 'Get-XsmExchangeInventory', 'Get-XsmExternalDomains', 'Resolve-XsmDomainTenant', 'Resolve-XsmDomainTenants', 'Test-XsmTenantInfoAvailable', 'Get-XsmXtapState'
-        'Get-XsmMigrationItems', 'Get-XsmItemDecision', 'Get-XsmPartnerConfirmation', 'Export-XsmSelection', 'Import-XsmSelection', 'Save-XsmJson'
+        'Get-XsmMigrationItems', 'Get-XsmItemDecision', 'Get-XsmNotMigratedSummary', 'Get-XsmPartnerConfirmation', 'Export-XsmSelection', 'Import-XsmSelection', 'Save-XsmJson'
         'Find-XsmLatestSnapshot', 'Import-XsmSnapshot', 'Import-XsmSharingPolicyMailboxes'
-        'New-XsmTargetState', 'Get-XsmLevelConflicts', 'Import-XsmLevelChoices', 'Save-XsmLevelChoices', 'Request-XsmLevelChoices', 'Get-XsmLiveState', 'New-XsmActions', 'Show-XsmActions', 'Get-XsmActionCounts', 'Invoke-XsmActions', 'Set-XsmVerification'
+        'New-XsmTargetState', 'Get-XsmLevelConflicts', 'Import-XsmLevelChoices', 'Save-XsmLevelChoices', 'Request-XsmLevelChoices', 'Get-XsmLiveState', 'New-XsmActions', 'Show-XsmActions', 'Get-XsmActionCounts', 'Get-XsmPhaseExplanation', 'Invoke-XsmActions', 'Set-XsmVerification'
         'Get-XsmCutover', 'Export-XsmCutoverText', 'Export-XsmActionsCsv', 'New-XsmReportData', 'New-XsmHtmlReport', 'Get-XsmPartnerSummary', 'Export-XsmPartnerSnippet'
         'ConvertTo-XsmReportAction', 'ConvertTo-XsmReportTarget', 'ConvertTo-XsmReportItems', 'ConvertTo-XsmReportXtap'
     )

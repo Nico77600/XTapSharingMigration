@@ -27,7 +27,7 @@
 
 .NOTES
     Author  : Nicolas Fabert
-    Version : 1.0.2
+    Version : 1.0.3
 #>
 [CmdletBinding()]
 param(
