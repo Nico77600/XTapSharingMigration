@@ -1,14 +1,14 @@
 ---
 title: X-TAP Sharing Migration
-subtitle: Administrator guide
+subtitle: Developer guide
 version: 1.0.3
 author: Nicolas Fabert
-updated: 2026-10-02
+updated: 2026-10-08
 ---
 
-# X-TAP Sharing Migration — Administrator guide
+# X-TAP Sharing Migration — Developer guide
 
-> Moves cross-tenant **Free/Busy, MailTips and calendar sharing** from Exchange Online organization relationships, sharing policies and availability address spaces to the **Microsoft 365 cross-tenant access policy (X-TAP)** — for **one tenant**, in **two phases** that different administrators can run.
+> Moves cross-tenant **Free/Busy, MailTips and calendar sharing** from Exchange Online organization relationships, sharing policies and availability address spaces to the **Microsoft 365 cross-tenant access policy (X-TAP)** — for **one tenant**, in **two phases** that different administrators can run. The commands of every day, from the first inventory to the cutover, are in the [user guide](XTapSharingMigration-UserGuide.md).
 
 > [!IMPORTANT]
 > Files downloaded from the Internet may be blocked by Windows and fail to run. Before using this project, unblock every file in the downloaded folder:

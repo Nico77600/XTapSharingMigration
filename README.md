@@ -11,7 +11,8 @@
   <a href="#from-inventory-to-cutover"><b>From inventory to cutover</b></a> &nbsp;&middot;&nbsp;
   <a href="#reports"><b>Reports</b></a> &nbsp;&middot;&nbsp;
   <a href="#quick-start"><b>Quick start</b></a> &nbsp;&middot;&nbsp;
-  <a href="package/docs/XTapSharingMigration-Guide.md"><b>Administrator guide</b></a>
+  <a href="package/docs/XTapSharingMigration-UserGuide.md"><b>User guide</b></a> &nbsp;&middot;&nbsp;
+  <a href="package/docs/XTapSharingMigration-Guide.md"><b>Developer guide</b></a>
 </p>
 
 > [!IMPORTANT]
@@ -116,16 +117,18 @@ $run = '.\output\contoso.onmicrosoft.com\2026-10-01_101500_Collect'
 .\Invoke-XTapSharingMigration.ps1 -Mode Apply -Phase Exchange -SnapshotPath $run -UserPrincipalName exo-admin@contoso.com
 ```
 
-What to hand over, the accounts, the order and what happens if the Exchange phase runs first: [guide, chapter 8 — Two administrators](package/docs/XTapSharingMigration-Guide.md#two-administrators).
-
-The `package` folder of the repository also holds exactly the files needed to run, with the guide. The zip of each [release](https://github.com/Nico77600/XTapSharingMigration/releases) contains the same run-time files with the HTML guide; `tools\New-XsmPackage.ps1` builds that zip content from the repository.
+What to hand over, the accounts, the order and what happens if the Exchange phase runs first: [developer guide, chapter 8 — Two administrators](package/docs/XTapSharingMigration-Guide.md#two-administrators).
 
 ## Documentation
 
-The **administrator guide** covers the principles, what is in scope, the partner tenant ID confirmation, the configuration rules, `Selection.csv`, the reports, **what to do after the script** (rollout check, partner contact, change window, cutover, test matrix, browser developer tools, rollback, cleanup), troubleshooting and the internals:
+The `package` folder of the repository also holds exactly the files needed to run, with both guides. The zip of each [release](https://github.com/Nico77600/XTapSharingMigration/releases) contains the same run-time files with the HTML guides; `tools\New-XsmPackage.ps1` builds that zip content from the repository.
 
-- [package/docs/XTapSharingMigration-Guide.md](package/docs/XTapSharingMigration-Guide.md)
-- `package/docs/XTapSharingMigration-Guide.html` — the same guide as a single HTML file (download it and open it locally)
+| Guide | Content |
+|---|---|
+| **[User guide](package/docs/XTapSharingMigration-UserGuide.md)** | **The path, step by step**: the prerequisites (the modules, the roles, the feature rolled out in both tenants, the two administrators), the one-time setup, then inventory, partner tenant ID confirmation, plan, the Entra phase, the Exchange phase, the cutover with each partner and the cleanup — each step with the command to copy and what you should see; then the reports, the files of a run, the exit codes and what to do when something is blocked. |
+| **[Developer guide](package/docs/XTapSharingMigration-Guide.md)** | Everything else: the principles, what is in scope and why, the partner tenant ID confirmation, the installation, every rule of the configuration, `Selection.csv`, the reports, **what to do after the script** (rollout check, partner contact, change window, cutover, test matrix, browser developer tools, rollback, cleanup), the exit codes and files, the internals, troubleshooting, the Microsoft Graph calls, the certificate mode and the lab validation. |
+
+Both guides also exist as a single HTML file with a light and a dark theme (`package/docs/XTapSharingMigration-UserGuide.html`, `package/docs/XTapSharingMigration-Guide.html`): download them and open them locally, or use the copies in the release zip.
 
 ## Tests
 
@@ -134,7 +137,7 @@ Invoke-Pester -Path .\tests          # Pester 5+, simulated tenant, no connectio
 .\tests\New-DemoReports.ps1          # the three HTML reports from the simulated tenant
 ```
 
-`tools\Build-Documentation.ps1` rebuilds the HTML guide; `tools\New-ReadmeImages.ps1` renders the graphics of this page from the cards and flows of the guide, in a light and a dark version.
+`tools\Build-Documentation.ps1` rebuilds the HTML guides; `tools\New-ReadmeImages.ps1` renders the graphics of this page from the cards and flows of the guide, in a light and a dark version.
 
 ## License
 
