@@ -514,11 +514,11 @@ Install-Module ExchangeOnlineManagement -MinimumVersion 3.10.1 -Scope CurrentUse
 </div>
 </div></section><section class="section" id="installation"><div class="section-head"><div class="section-icon"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 20h16"/></svg></div><div><div class="section-eyebrow">Chapter 6</div><h2>Installation</h2></div></div><div class="section-body">
 <div class="code"><div class="code-head"><span>PowerShell</span><button type="button" class="copy"><svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg><span>Copy</span></button></div><pre><code>git clone https://github.com/Nico77600/XTapSharingMigration.git
-cd XTapSharingMigration
+cd XTapSharingMigration\package
 notepad .\config\XTapSharingMigration.config.psd1    # Tenant.TenantId, Tenant.Organization
 .\Invoke-XTapSharingMigration.ps1                     # first inventory
 </code></pre></div>
-<p>Or download the zip of a <a href="https://github.com/Nico77600/XTapSharingMigration/releases" target="_blank" rel="noopener">release</a>: it contains only the files needed to run.</p>
+<p>Or download the zip of a <a href="https://github.com/Nico77600/XTapSharingMigration/releases" target="_blank" rel="noopener">release</a>: it contains the same run-time files as <code>package\</code>, with the HTML guide.</p>
 <div class="table-wrap"><table>
 <thead>
 <tr>
@@ -528,19 +528,19 @@ notepad .\config\XTapSharingMigration.config.psd1    # Tenant.TenantId, Tenant.O
 </thead>
 <tbody>
 <tr>
-<td><code>config\</code></td>
+<td><code>package\config\</code></td>
 <td>the configuration file</td>
 </tr>
 <tr>
-<td><code>src\</code></td>
+<td><code>package\src\</code></td>
 <td>the module code, one file per stage</td>
 </tr>
 <tr>
-<td><code>templates\</code></td>
+<td><code>package\templates\</code></td>
 <td>the HTML report template</td>
 </tr>
 <tr>
-<td><code>docs\</code></td>
+<td><code>package\docs\</code></td>
 <td>this guide (Markdown and HTML)</td>
 </tr>
 <tr>
@@ -1402,43 +1402,43 @@ Rollback: re-enable the old objects (commands ready on our side).
 <td>Entry point: modes, steps, summary, exit codes</td>
 </tr>
 <tr>
-<td><code>src\Console.ps1</code></td>
+<td><code>package\src\Console.ps1</code></td>
 <td>Banner, steps, tables, summary card, log</td>
 </tr>
 <tr>
-<td><code>src\Configuration.ps1</code></td>
+<td><code>package\src\Configuration.ps1</code></td>
 <td>Configuration checks; <strong>feature catalogue</strong> (features, levels, capability names); scope values</td>
 </tr>
 <tr>
-<td><code>src\Connection.ps1</code></td>
+<td><code>package\src\Connection.ps1</code></td>
 <td>Module choice, Exchange Online and Graph connections, <code>Invoke-XsmGraph</code> (v1.0 only)</td>
 </tr>
 <tr>
-<td><code>src\Collect.ps1</code></td>
+<td><code>package\src\Collect.ps1</code></td>
 <td>Exchange inventory, X-TAP state, tenant of each domain, snapshot files</td>
 </tr>
 <tr>
-<td><code>src\Classification.ps1</code></td>
+<td><code>package\src\Classification.ps1</code></td>
 <td>Items, reasons, comparison with X-TAP — pure functions</td>
 </tr>
 <tr>
-<td><code>src\Selection.ps1</code></td>
+<td><code>package\src\Selection.ps1</code></td>
 <td>Decision rules, partner confirmation, <code>Selection.csv</code></td>
 </tr>
 <tr>
-<td><code>src\Plan.ps1</code></td>
+<td><code>package\src\Plan.ps1</code></td>
 <td>Target configuration, live state, actions</td>
 </tr>
 <tr>
-<td><code>src\Apply.ps1</code></td>
+<td><code>package\src\Apply.ps1</code></td>
 <td>Execution, retries, verification</td>
 </tr>
 <tr>
-<td><code>src\Report.ps1</code></td>
+<td><code>package\src\Report.ps1</code></td>
 <td>HTML report data, CSV, cutover commands</td>
 </tr>
 <tr>
-<td><code>templates\Report.template.html</code></td>
+<td><code>package\templates\Report.template.html</code></td>
 <td>The report (one file, data embedded as JSON)</td>
 </tr>
 <tr>
@@ -1455,7 +1455,7 @@ Rollback: re-enable the old objects (commands ready on our side).
 </tr>
 </tbody>
 </table></div>
-<p><strong>Adding a capability</strong> (when Microsoft adds a level): add it to <code>$script:FeatureCatalog</code> in <code>src\Configuration.ps1</code>, and to <code>$script:ExchangeLevelMap</code> if an Exchange value maps to it. Nothing else depends on capability names.</p>
+<p><strong>Adding a capability</strong> (when Microsoft adds a level): add it to <code>$script:FeatureCatalog</code> in <code>package\src\Configuration.ps1</code>, and to <code>$script:ExchangeLevelMap</code> if an Exchange value maps to it. Nothing else depends on capability names.</p>
 <p><strong>PowerShell pitfalls met during the build</strong>: <code>Group-Object</code> and <code>Sort-Object</code> with a property name do not work on ordered dictionaries (use a script block); <code>return , $array</code> from a function wraps the array once more in <code>@( )</code>; <code>Connect-MgGraph -UseDeviceCode</code> writes its message to the output stream; ExchangeOnlineManagement loads <code>Microsoft.IdentityModel</code> 8.19 into the session and breaks a later interactive Graph sign-in — sign in to Graph first.</p>
 </div></section><section class="section" id="testing-a-change"><div class="section-head"><div class="section-icon"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6M10 3v6L4.5 18.5A1.7 1.7 0 0 0 6 21h12a1.7 1.7 0 0 0 1.5-2.5L14 9V3"/><path d="M7 15h10"/></svg></div><div><div class="section-eyebrow">Chapter 14</div><h2>Testing a change</h2></div></div><div class="section-body">
 <div class="code"><div class="code-head"><span>PowerShell</span><button type="button" class="copy"><svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg><span>Copy</span></button></div><pre><code>Invoke-Pester -Path .\tests -Output Detailed     # 50 tests, no connection to Microsoft 365
@@ -1670,9 +1670,9 @@ Rollback: re-enable the old objects (commands ready on our side).
 <p>Findings fixed during the validation: Graph sign-in before Exchange Online, device-code message, partner tenant ID confirmation, <code>ExistingCapability</code>, group names in the reports. Review after the validation: availability address spaces handled as <strong>PartnerSide</strong> (direction), <strong>level choice</strong> asked to the administrator.</p>
 </div></section><section class="section" id="annex-e-versioning-and-release-checklist"><div class="section-head"><div class="section-icon"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8" r="1.5"/></svg></div><div><div class="section-eyebrow">Annex E</div><h2>Versioning and release checklist</h2></div></div><div class="section-body">
 <p>Versions follow MAJOR.MINOR.PATCH. The version appears in <code>XTapSharingMigration.psd1</code> (<code>ModuleVersion</code>), <code>XTapSharingMigration.psm1</code>, the entry script, this guide (front matter), the configuration file and the report template.</p>
-<ol class="steps"><li><span class="step-num">1</span><div class="step-body"><div class="step-title">Tests</div><div class="step-text"><code>Invoke-Pester -Path .\tests</code> — all green.</div></div></li><li><span class="step-num">2</span><div class="step-body"><div class="step-title">Guide</div><div class="step-text"><code>.\tools\Build-Documentation.ps1</code> — rebuilds <code>docs\XTapSharingMigration-Guide.html</code>.</div></div></li><li><span class="step-num">3</span><div class="step-body"><div class="step-title">Changelog</div><div class="step-text">Add the version to <code>CHANGELOG.md</code>.</div></div></li><li><span class="step-num">4</span><div class="step-body"><div class="step-title">Package</div><div class="step-text"><code>.\tools\New-XsmPackage.ps1</code> — copies the files needed to run, configuration emptied, checked free of tenant values.</div></div></li><li><span class="step-num">5</span><div class="step-body"><div class="step-title">README images</div><div class="step-text"><code>.\tools\New-ReadmeImages.ps1</code> — after a change of the cards or flows of chapters 1, 2 and 11, or of the version: the banner, principles, how it works and runbook graphics of the README, light and dark.</div></div></li><li><span class="step-num">6</span><div class="step-body"><div class="step-title">Tag</div><div class="step-text"><code>git tag vX.Y.Z</code> and publish the zip of the package with the release.</div></div></li></ol>
+<ol class="steps"><li><span class="step-num">1</span><div class="step-body"><div class="step-title">Tests</div><div class="step-text"><code>Invoke-Pester -Path .\tests</code> — all green.</div></div></li><li><span class="step-num">2</span><div class="step-body"><div class="step-title">Guide</div><div class="step-text"><code>.\tools\Build-Documentation.ps1</code> — rebuilds <code>package\docs\XTapSharingMigration-Guide.html</code>.</div></div></li><li><span class="step-num">3</span><div class="step-body"><div class="step-title">Changelog</div><div class="step-text">Add the version to <code>CHANGELOG.md</code>.</div></div></li><li><span class="step-num">4</span><div class="step-body"><div class="step-title">Package</div><div class="step-text"><code>.\tools\New-XsmPackage.ps1</code> — copies the files needed to run, configuration emptied, checked free of tenant values.</div></div></li><li><span class="step-num">5</span><div class="step-body"><div class="step-title">README images</div><div class="step-text"><code>.\tools\New-ReadmeImages.ps1</code> — after a change of the cards or flows of chapters 1, 2 and 11, or of the version: the banner, principles, how it works and runbook graphics of the README, light and dark.</div></div></li><li><span class="step-num">6</span><div class="step-body"><div class="step-title">Tag</div><div class="step-text"><code>git tag vX.Y.Z</code> and publish the zip of the package with the release.</div></div></li></ol>
 </div></section>
-<footer>X-TAP Sharing Migration 1.0.3 · Nicolas Fabert · generated 2026-10-02 17:25 from XTapSharingMigration-Guide.md</footer></main>
+<footer>X-TAP Sharing Migration 1.0.3 · Nicolas Fabert · generated 2026-10-08 08:53 from XTapSharingMigration-Guide.md</footer></main>
 <button type="button" id="to-top" title="Back to top"><svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 14 6-6 6 6"/></svg></button>
 <dialog id="zoom"><img alt=""></dialog>
 <script>

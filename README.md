@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/images/readme-banner-dark.png">
-    <img alt="X-TAP Sharing Migration: moves cross-tenant Free/Busy, MailTips and calendar sharing from organization relationships and sharing policies to the Microsoft 365 cross-tenant access policy" src="docs/images/readme-banner-light.png">
+    <source media="(prefers-color-scheme: dark)" srcset="package/docs/images/readme-banner-dark.png">
+    <img alt="X-TAP Sharing Migration: moves cross-tenant Free/Busy, MailTips and calendar sharing from organization relationships and sharing policies to the Microsoft 365 cross-tenant access policy" src="package/docs/images/readme-banner-light.png">
   </picture>
 </p>
 
@@ -11,7 +11,7 @@
   <a href="#from-inventory-to-cutover"><b>From inventory to cutover</b></a> &nbsp;&middot;&nbsp;
   <a href="#reports"><b>Reports</b></a> &nbsp;&middot;&nbsp;
   <a href="#quick-start"><b>Quick start</b></a> &nbsp;&middot;&nbsp;
-  <a href="docs/XTapSharingMigration-Guide.md"><b>Administrator guide</b></a>
+  <a href="package/docs/XTapSharingMigration-Guide.md"><b>Administrator guide</b></a>
 </p>
 
 > [!IMPORTANT]
@@ -30,15 +30,15 @@
 Sharing Free/Busy, MailTips and calendars with another Microsoft 365 organization through an **organization relationship** or a **sharing policy** relies on **Exchange Web Services**, which is being retired in Exchange Online. Microsoft replaces these objects with the **Microsoft 365 cross-tenant access policy (X-TAP)** and documents the migration ([Migrate to Microsoft 365 Cross-Tenant Access Policy](https://learn.microsoft.com/exchange/sharing/migrate-to-m365-xtap)). In a real tenant the hard part is not the commands, it is the **inventory** — which relationships belong to the Exchange hybrid, which partner hides behind which domain, which sharing policy applies to which mailboxes — and a written trace of every decision. This tool does that part, for **one tenant**, in **two phases** that different administrators can run.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/readme-principles-dark.png">
-  <img alt="Design principles: one tenant and Exchange Online only, two phases and two administrators, read first, nothing lost, partners confirmed, manual cutover" src="docs/images/readme-principles-light.png">
+  <source media="(prefers-color-scheme: dark)" srcset="package/docs/images/readme-principles-dark.png">
+  <img alt="Design principles: one tenant and Exchange Online only, two phases and two administrators, read first, nothing lost, partners confirmed, manual cutover" src="package/docs/images/readme-principles-light.png">
 </picture>
 
 ## How it works
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/readme-how-it-works-dark.png">
-  <img alt="The configuration is read by Invoke-XTapSharingMigration.ps1, which reads Exchange Online and Microsoft Graph, writes Microsoft 365 X-TAP in Apply only, one phase at a time, and writes the reports; three modes: Collect and Plan read only, Apply changes" src="docs/images/readme-how-it-works-light.png">
+  <source media="(prefers-color-scheme: dark)" srcset="package/docs/images/readme-how-it-works-dark.png">
+  <img alt="The configuration is read by Invoke-XTapSharingMigration.ps1, which reads Exchange Online and Microsoft Graph, writes Microsoft 365 X-TAP in Apply only, one phase at a time, and writes the reports; three modes: Collect and Plan read only, Apply changes" src="package/docs/images/readme-how-it-works-light.png">
 </picture>
 
 `Collect` keeps the **initial picture** of the tenant in `snapshot.json` and `Inventory.html`; `Plan` and `Apply` work from it. `Apply -Phase Entra` creates the security groups and the Microsoft 365 collaboration trust of each partner (Security / Groups Administrator), `Apply -Phase Exchange` the Free/Busy, MailTips and calendar sharing capabilities (Exchange Administrator) — or both with `-Phase All`. Every Apply starts with the same comparison as Plan and ends by reading the tenant again: what is in place shows **No change**. Microsoft Graph **v1.0** only.
@@ -61,8 +61,8 @@ Sharing Free/Busy, MailTips and calendars with another Microsoft 365 organizatio
 ## From inventory to cutover
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/readme-runbook-dark.png">
-  <img alt="With the tool: Collect, Plan, Apply Entra (phase 1), Apply Exchange (phase 2). After the tool, with each partner: rollout in both tenants, partner contact, change window, cutover, GO or rollback against the baseline, cleanup" src="docs/images/readme-runbook-light.png">
+  <source media="(prefers-color-scheme: dark)" srcset="package/docs/images/readme-runbook-dark.png">
+  <img alt="With the tool: Collect, Plan, Apply Entra (phase 1), Apply Exchange (phase 2). After the tool, with each partner: rollout in both tenants, partner contact, change window, cutover, GO or rollback against the baseline, cleanup" src="package/docs/images/readme-runbook-light.png">
 </picture>
 
 - **One feature at a time**: `-Feature FreeBusy, MailTips` limits Plan and Apply to some features — calendar sharing reaches the tenants after Free/Busy and MailTips.
@@ -73,12 +73,12 @@ Sharing Free/Busy, MailTips and calendars with another Microsoft 365 organizatio
 
 <table>
   <tr>
-    <td width="50%" valign="top"><a href="docs/images/report-inventory.png"><img alt="Inventory report" src="docs/images/report-inventory.png"></a><br><sub><b>Inventory</b> &middot; the initial picture: every item, in scope or out of scope with its reason</sub></td>
-    <td width="50%" valign="top"><a href="docs/images/report-plan.png"><img alt="Plan report" src="docs/images/report-plan.png"></a><br><sub><b>Plan / Result</b> &middot; the actions of both phases, before and after, verified</sub></td>
+    <td width="50%" valign="top"><a href="package/docs/images/report-inventory.png"><img alt="Inventory report" src="package/docs/images/report-inventory.png"></a><br><sub><b>Inventory</b> &middot; the initial picture: every item, in scope or out of scope with its reason</sub></td>
+    <td width="50%" valign="top"><a href="package/docs/images/report-plan.png"><img alt="Plan report" src="package/docs/images/report-plan.png"></a><br><sub><b>Plan / Result</b> &middot; the actions of both phases, before and after, verified</sub></td>
   </tr>
   <tr>
-    <td width="50%" valign="top"><a href="docs/images/console-plan.png"><img alt="Plan in the console" src="docs/images/console-plan.png"></a><br><sub><b>Console</b> &middot; banner, steps, one table per phase, summary card</sub></td>
-    <td width="50%" valign="top"><a href="docs/images/devtools-freebusy-scope.png"><img alt="Free/Busy in the browser developer tools" src="docs/images/devtools-freebusy-scope.png"></a><br><sub><b>After the cutover</b> &middot; the GetSchedule call in the developer tools: in scope, out of scope</sub></td>
+    <td width="50%" valign="top"><a href="package/docs/images/console-plan.png"><img alt="Plan in the console" src="package/docs/images/console-plan.png"></a><br><sub><b>Console</b> &middot; banner, steps, one table per phase, summary card</sub></td>
+    <td width="50%" valign="top"><a href="package/docs/images/devtools-freebusy-scope.png"><img alt="Free/Busy in the browser developer tools" src="package/docs/images/devtools-freebusy-scope.png"></a><br><sub><b>After the cutover</b> &middot; the GetSchedule call in the developer tools: in scope, out of scope</sub></td>
   </tr>
 </table>
 
@@ -98,7 +98,7 @@ Every report is a self-contained HTML file — light and dark themes, search and
 
 ```powershell
 git clone https://github.com/Nico77600/XTapSharingMigration.git
-cd XTapSharingMigration
+cd XTapSharingMigration\package
 notepad .\config\XTapSharingMigration.config.psd1          # Tenant.TenantId, Tenant.Organization
 
 .\Invoke-XTapSharingMigration.ps1                           # inventory (read-only)
@@ -116,16 +116,16 @@ $run = '.\output\contoso.onmicrosoft.com\2026-10-01_101500_Collect'
 .\Invoke-XTapSharingMigration.ps1 -Mode Apply -Phase Exchange -SnapshotPath $run -UserPrincipalName exo-admin@contoso.com
 ```
 
-What to hand over, the accounts, the order and what happens if the Exchange phase runs first: [guide, chapter 8 — Two administrators](docs/XTapSharingMigration-Guide.md#two-administrators).
+What to hand over, the accounts, the order and what happens if the Exchange phase runs first: [guide, chapter 8 — Two administrators](package/docs/XTapSharingMigration-Guide.md#two-administrators).
 
-The zip of each [release](https://github.com/Nico77600/XTapSharingMigration/releases) contains only the files needed to run, with the HTML guide.
+The `package` folder of the repository also holds exactly the files needed to run, with the guide. The zip of each [release](https://github.com/Nico77600/XTapSharingMigration/releases) contains the same run-time files with the HTML guide; `tools\New-XsmPackage.ps1` builds that zip content from the repository.
 
 ## Documentation
 
 The **administrator guide** covers the principles, what is in scope, the partner tenant ID confirmation, the configuration rules, `Selection.csv`, the reports, **what to do after the script** (rollout check, partner contact, change window, cutover, test matrix, browser developer tools, rollback, cleanup), troubleshooting and the internals:
 
-- [docs/XTapSharingMigration-Guide.md](docs/XTapSharingMigration-Guide.md)
-- `docs/XTapSharingMigration-Guide.html` — the same guide as a single HTML file (download it and open it locally)
+- [package/docs/XTapSharingMigration-Guide.md](package/docs/XTapSharingMigration-Guide.md)
+- `package/docs/XTapSharingMigration-Guide.html` — the same guide as a single HTML file (download it and open it locally)
 
 ## Tests
 

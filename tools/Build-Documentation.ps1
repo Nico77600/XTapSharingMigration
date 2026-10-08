@@ -2,7 +2,7 @@
 
 <#
 .SYNOPSIS
-    Builds docs\XTapSharingMigration-Guide.html from docs\XTapSharingMigration-Guide.md.
+    Builds package\docs\XTapSharingMigration-Guide.html from package\docs\XTapSharingMigration-Guide.md.
 
 .DESCRIPTION
     The Markdown guide stays readable as plain text (and on GitHub / Azure DevOps). This script
@@ -34,8 +34,8 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$Source = (Join-Path $PSScriptRoot '..\docs\XTapSharingMigration-Guide.md'),
-    [string]$Destination = (Join-Path $PSScriptRoot '..\docs\XTapSharingMigration-Guide.html')
+    [string]$Source = (Join-Path $PSScriptRoot '..\package\docs\XTapSharingMigration-Guide.md'),
+    [string]$Destination = (Join-Path $PSScriptRoot '..\package\docs\XTapSharingMigration-Guide.html')
 )
 $ErrorActionPreference = 'Stop'
 $Source = (Resolve-Path $Source).Path

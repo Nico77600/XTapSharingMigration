@@ -36,7 +36,7 @@ $TestTenant = @{
 function New-TestConfiguration {
     <# The delivered configuration file with fictitious tenant values, a test output folder and one group. #>
     param([Parameter(Mandatory)][string]$Directory)
-    $root = Split-Path $PSScriptRoot -Parent
+    $root = Join-Path (Split-Path $PSScriptRoot -Parent) 'package'
     $text = [IO.File]::ReadAllText((Join-Path $root 'config\XTapSharingMigration.config.psd1'))
     $values = [ordered]@{ TenantId = $TestTenant.Id; Organization = 'contoso.onmicrosoft.com' }
     foreach ($key in $values.Keys) {

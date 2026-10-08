@@ -236,19 +236,19 @@ The first sign-in asks for consent to these permissions for the **Microsoft Grap
 
 ```powershell
 git clone https://github.com/Nico77600/XTapSharingMigration.git
-cd XTapSharingMigration
+cd XTapSharingMigration\package
 notepad .\config\XTapSharingMigration.config.psd1    # Tenant.TenantId, Tenant.Organization
 .\Invoke-XTapSharingMigration.ps1                     # first inventory
 ```
 
-Or download the zip of a [release](https://github.com/Nico77600/XTapSharingMigration/releases): it contains only the files needed to run.
+Or download the zip of a [release](https://github.com/Nico77600/XTapSharingMigration/releases): it contains the same run-time files as `package\`, with the HTML guide.
 
 | Folder | Content |
 |---|---|
-| `config\` | the configuration file |
-| `src\` | the module code, one file per stage |
-| `templates\` | the HTML report template |
-| `docs\` | this guide (Markdown and HTML) |
+| `package\config\` | the configuration file |
+| `package\src\` | the module code, one file per stage |
+| `package\templates\` | the HTML report template |
+| `package\docs\` | this guide (Markdown and HTML) |
 | `tests\` | Pester tests, simulated tenant, demo reports |
 | `output\`, `logs\` | created at run time — never commit them (tenant data) |
 
@@ -714,21 +714,21 @@ Console style: emoji in Windows Terminal and VS Code, console-font symbols elsew
 | File | Role |
 |---|---|
 | `Invoke-XTapSharingMigration.ps1` | Entry point: modes, steps, summary, exit codes |
-| `src\Console.ps1` | Banner, steps, tables, summary card, log |
-| `src\Configuration.ps1` | Configuration checks; **feature catalogue** (features, levels, capability names); scope values |
-| `src\Connection.ps1` | Module choice, Exchange Online and Graph connections, `Invoke-XsmGraph` (v1.0 only) |
-| `src\Collect.ps1` | Exchange inventory, X-TAP state, tenant of each domain, snapshot files |
-| `src\Classification.ps1` | Items, reasons, comparison with X-TAP — pure functions |
-| `src\Selection.ps1` | Decision rules, partner confirmation, `Selection.csv` |
-| `src\Plan.ps1` | Target configuration, live state, actions |
-| `src\Apply.ps1` | Execution, retries, verification |
-| `src\Report.ps1` | HTML report data, CSV, cutover commands |
-| `templates\Report.template.html` | The report (one file, data embedded as JSON) |
+| `package\src\Console.ps1` | Banner, steps, tables, summary card, log |
+| `package\src\Configuration.ps1` | Configuration checks; **feature catalogue** (features, levels, capability names); scope values |
+| `package\src\Connection.ps1` | Module choice, Exchange Online and Graph connections, `Invoke-XsmGraph` (v1.0 only) |
+| `package\src\Collect.ps1` | Exchange inventory, X-TAP state, tenant of each domain, snapshot files |
+| `package\src\Classification.ps1` | Items, reasons, comparison with X-TAP — pure functions |
+| `package\src\Selection.ps1` | Decision rules, partner confirmation, `Selection.csv` |
+| `package\src\Plan.ps1` | Target configuration, live state, actions |
+| `package\src\Apply.ps1` | Execution, retries, verification |
+| `package\src\Report.ps1` | HTML report data, CSV, cutover commands |
+| `package\templates\Report.template.html` | The report (one file, data embedded as JSON) |
 | `tools\Build-Documentation.ps1` | This guide, Markdown to one HTML file |
 | `tools\New-ReadmeImages.ps1` | The graphics of the GitHub README, from the cards and flows of this guide |
 | `tools\New-XsmPackage.ps1` | The release package |
 
-**Adding a capability** (when Microsoft adds a level): add it to `$script:FeatureCatalog` in `src\Configuration.ps1`, and to `$script:ExchangeLevelMap` if an Exchange value maps to it. Nothing else depends on capability names.
+**Adding a capability** (when Microsoft adds a level): add it to `$script:FeatureCatalog` in `package\src\Configuration.ps1`, and to `$script:ExchangeLevelMap` if an Exchange value maps to it. Nothing else depends on capability names.
 
 **PowerShell pitfalls met during the build**: `Group-Object` and `Sort-Object` with a property name do not work on ordered dictionaries (use a script block); `return , $array` from a function wraps the array once more in `@( )`; `Connect-MgGraph -UseDeviceCode` writes its message to the output stream; ExchangeOnlineManagement loads `Microsoft.IdentityModel` 8.19 into the session and breaks a later interactive Graph sign-in — sign in to Graph first.
 
@@ -824,7 +824,7 @@ Versions follow MAJOR.MINOR.PATCH. The version appears in `XTapSharingMigration.
 
 ```steps
 Tests | `Invoke-Pester -Path .\tests` — all green.
-Guide | `.\tools\Build-Documentation.ps1` — rebuilds `docs\XTapSharingMigration-Guide.html`.
+Guide | `.\tools\Build-Documentation.ps1` — rebuilds `package\docs\XTapSharingMigration-Guide.html`.
 Changelog | Add the version to `CHANGELOG.md`.
 Package | `.\tools\New-XsmPackage.ps1` — copies the files needed to run, configuration emptied, checked free of tenant values.
 README images | `.\tools\New-ReadmeImages.ps1` — after a change of the cards or flows of chapters 1, 2 and 11, or of the version: the banner, principles, how it works and runbook graphics of the README, light and dark.

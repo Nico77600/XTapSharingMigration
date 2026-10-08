@@ -7,8 +7,8 @@
 .DESCRIPTION
     The package contains what Invoke-XTapSharingMigration.ps1 needs at run time, the HTML guide, the README,
     the changelog and the licence:
-        Invoke-XTapSharingMigration.ps1, XTapSharingMigration.psd1, XTapSharingMigration.psm1,
-        src\, templates\, config\, docs\XTapSharingMigration-Guide.html, README.md, CHANGELOG.md, LICENSE
+        package\Invoke-XTapSharingMigration.ps1, package\XTapSharingMigration.psd1, package\XTapSharingMigration.psm1,
+        package\src\, package\templates\, package\config\, package\docs\XTapSharingMigration-Guide.html, package\README.md, CHANGELOG.md, package\LICENSE
     It never copies output\, logs\ or the tests: no tenant data is in the package.
 
     The configuration file is copied with the tenant values emptied (TenantId, Organization, ExchangeAdmin,
@@ -16,7 +16,7 @@
     the delivered examples. The script then checks that none of the emptied values appears in the package.
 
 .PARAMETER Destination
-    Package folder. Default: package\XTapSharingMigration-<version>, next to the tool folder.
+    Package folder. Default: package\XTapSharingMigration-<version>, next to the repository folder.
 
 .PARAMETER Force
     Replace the destination folder if it already contains a package. A folder with an output\ sub-folder
@@ -36,14 +36,15 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$root = Split-Path $PSScriptRoot -Parent
+$repoRoot = Split-Path $PSScriptRoot -Parent
+$root = Join-Path $repoRoot 'package'
 $version = (Import-PowerShellDataFile (Join-Path $root 'XTapSharingMigration.psd1')).ModuleVersion
-if (-not $Destination) { $Destination = Join-Path (Split-Path $root -Parent) "package\XTapSharingMigration-$version" }
+if (-not $Destination) { $Destination = Join-Path (Split-Path $repoRoot -Parent) "package\XTapSharingMigration-$version" }
 $Destination = [IO.Path]::GetFullPath($Destination, (Get-Location).Path).TrimEnd('\')
 
-$rootPrefix = [IO.Path]::GetFullPath($root).TrimEnd('\') + '\'
+$rootPrefix = [IO.Path]::GetFullPath($repoRoot).TrimEnd('\') + '\'
 if (($Destination + '\').StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase) -or $rootPrefix.StartsWith($Destination + '\', [StringComparison]::OrdinalIgnoreCase)) {
-    throw "The destination must be outside the tool folder: $Destination"
+    throw "The destination must be outside the repository folder: $Destination"
 }
 if (Test-Path -LiteralPath $Destination) {
     if (-not $Force) { throw "The destination already exists: $Destination. Use -Force to replace it." }
@@ -54,14 +55,16 @@ if (Test-Path -LiteralPath $Destination) {
 
 # ---- Files needed at run time ---------------------------------------------------------------------------
 $files = [Collections.Generic.List[string]]::new()
-foreach ($f in 'Invoke-XTapSharingMigration.ps1', 'XTapSharingMigration.psd1', 'XTapSharingMigration.psm1', 'README.md', 'CHANGELOG.md', 'LICENSE',
+foreach ($f in 'Invoke-XTapSharingMigration.ps1', 'XTapSharingMigration.psd1', 'XTapSharingMigration.psm1', 'README.md', '..\CHANGELOG.md', 'LICENSE',
     'templates\Report.template.html', 'docs\XTapSharingMigration-Guide.html') { $files.Add($f) }
 Get-ChildItem -LiteralPath (Join-Path $root 'src') -Filter '*.ps1' -File | ForEach-Object { $files.Add("src\$($_.Name)") }
 
 foreach ($f in $files) {
     $source = Join-Path $root $f
     if (-not (Test-Path -LiteralPath $source -PathType Leaf)) { throw "Missing file in the tool folder: $f" }
-    $target = Join-Path $Destination $f
+    $targetName = Split-Path $f -Leaf
+    $targetRelative = if ($f -like '..\*') { $targetName } else { $f }
+    $target = Join-Path $Destination $targetRelative
     [void][IO.Directory]::CreateDirectory((Split-Path $target -Parent))
     Copy-Item -LiteralPath $source -Destination $target
 }

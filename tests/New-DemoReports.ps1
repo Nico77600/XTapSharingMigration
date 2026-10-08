@@ -19,7 +19,8 @@
 param([string]$OutputPath = (Join-Path ([IO.Path]::GetTempPath()) ('XTapSharingMigration-demo-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))))
 
 $ErrorActionPreference = 'Stop'
-$root = Split-Path $PSScriptRoot -Parent
+$repoRoot = Split-Path $PSScriptRoot -Parent
+$root = Join-Path $repoRoot 'package'
 Import-Module (Join-Path $root 'XTapSharingMigration.psd1') -Force
 . (Join-Path $PSScriptRoot 'TestData.ps1')
 . (Join-Path $PSScriptRoot 'FakeGraph.ps1')

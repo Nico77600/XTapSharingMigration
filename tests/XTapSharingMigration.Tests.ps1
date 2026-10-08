@@ -13,7 +13,8 @@
 #>
 
 BeforeAll {
-    $script:Root = Split-Path $PSScriptRoot -Parent
+    $script:RepoRoot = Split-Path $PSScriptRoot -Parent
+    $script:Root = Join-Path $script:RepoRoot 'package'
     Import-Module (Join-Path $script:Root 'XTapSharingMigration.psd1') -Force
     . (Join-Path $PSScriptRoot 'FakeGraph.ps1')
     . (Join-Path $PSScriptRoot 'TestData.ps1')
@@ -664,7 +665,7 @@ Describe 'Reports' {
 Describe 'Safety' {
     It 'never calls the beta endpoint of Microsoft Graph' {
         { InModuleScope XTapSharingMigration { Invoke-XsmGraph GET 'https://graph.microsoft.com/beta/policies' } } | Should -Throw '*beta*'
-        $files = Get-ChildItem (Join-Path $script:Root 'src'), $script:Root -Filter '*.ps*1' -File
+        $files = Get-ChildItem (Join-Path $script:Root 'src'), $script:Root, (Join-Path $script:RepoRoot 'tools') -Filter '*.ps*1' -File
         foreach ($f in $files) {
             $text = [IO.File]::ReadAllText($f.FullName)
             $text | Should -Not -Match 'Microsoft\.Graph\.Beta|Invoke-MgBeta|Get-MgBeta|New-MgBeta|Update-MgBeta'
