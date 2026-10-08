@@ -33,7 +33,7 @@ notepad .\config\XTapSharingMigration.config.psd1          # Tenant.TenantId, Te
 | Item | Role |
 |---|---|
 | `config\` | Example configuration file. |
-| `docs\` | Administrator guide in Markdown and HTML, with images. |
+| `docs\` | User and developer guides in Markdown and HTML, with images. |
 | `src\` | Module code, one file per stage. |
 | `templates\` | HTML report template. |
 | `Invoke-XTapSharingMigration.ps1` | Entry script to run. |
@@ -43,7 +43,8 @@ notepad .\config\XTapSharingMigration.config.psd1          # Tenant.TenantId, Te
 | `README.md` | This package quick start. |
 
 ## Documentation
-- [Guide](docs/XTapSharingMigration-Guide.md) - also `docs/XTapSharingMigration-Guide.html`, a single file to open locally
+- [User guide](docs/XTapSharingMigration-UserGuide.md) - also `docs/XTapSharingMigration-UserGuide.html`, a single file to open locally
+- [Developer guide](docs/XTapSharingMigration-Guide.md) - also `docs/XTapSharingMigration-Guide.html`
 
 Project page, releases and change log: https://github.com/Nico77600/XTapSharingMigration
 
