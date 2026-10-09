@@ -1,0 +1,10 @@
+{
+  "runtimeRoot": "package",
+  "testMode": "pester",
+  "testEntry": null,
+  "tests": [
+    "tests/XTapSharingMigration.Tests.ps1"
+  ],
+  "packageBuilder": "tools/New-XsmPackage.ps1",
+  "packageEntry": "Invoke-XTapSharingMigration.ps1"
+}
