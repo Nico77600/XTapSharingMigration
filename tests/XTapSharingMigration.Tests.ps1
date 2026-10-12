@@ -48,6 +48,33 @@ AfterAll {
     if ($script:Work -and (Test-Path $script:Work)) { Remove-Item $script:Work -Recurse -Force -ErrorAction SilentlyContinue }
 }
 
+Describe 'Disclaimer synchronization' {
+    BeforeAll {
+        $script:DisclaimerPattern = '(?ms)^## Disclaimer\r?\n(?<Text>.*?)(?=^## |\z)'
+        $sections = [regex]::Matches((Get-Content (Join-Path $script:RepoRoot 'README.md') -Raw), $script:DisclaimerPattern)
+        if ($sections.Count -ne 1) { throw 'The root README must have exactly one Disclaimer section.' }
+        $script:Disclaimer = ($sections[0].Groups['Text'].Value -replace "`r`n", "`n").Trim()
+    }
+
+    It 'ships the complete root disclaimer in the runtime README' {
+        $sections = [regex]::Matches((Get-Content (Join-Path $script:Root 'README.md') -Raw), $script:DisclaimerPattern)
+        $sections.Count | Should -Be 1
+        ($sections[0].Groups['Text'].Value -replace "`r`n", "`n").Trim() | Should -BeExactly $script:Disclaimer
+    }
+
+    It 'includes the complete root disclaimer in the entry script help notes' {
+        $errors = $null
+        $ast = [Management.Automation.Language.Parser]::ParseFile((Join-Path $script:Root 'Invoke-XTapSharingMigration.ps1'), [ref]$null, [ref]$errors)
+        $errors | Should -BeNullOrEmpty
+        $help = $ast.GetHelpContent()
+        $help | Should -Not -BeNullOrEmpty
+        $notes = ($help.Notes -replace "`r`n", "`n" -replace '(?m)^[ \t]+', '').Trim()
+        $start = $notes.IndexOf(($script:Disclaimer -split "`n")[0], [StringComparison]::Ordinal)
+        $start | Should -BeGreaterOrEqual 0
+        $notes.Substring($start) | Should -BeExactly $script:Disclaimer
+    }
+}
+
 Describe 'Configuration' {
     It 'loads the delivered configuration file with fictitious tenant values' {
         $script:Settings.Tenant.TenantId | Should -Be $TestTenant.Id
