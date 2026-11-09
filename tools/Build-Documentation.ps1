@@ -38,7 +38,7 @@
 
 .NOTES
     Author  : Nicolas Fabert
-    Version : 1.0.3
+    Version : 1.0.4
     PowerShell pitfall: never name a variable $matches — every -match overwrites the automatic
     $Matches, and variable names are case-insensitive.
 #>
@@ -158,7 +158,7 @@ $html = [regex]::Replace($html, '(?s)<pre><code class="language-(cards|steps|flo
     })
 
 # ---- Code blocks: label + copy button ------------------------------------------------------------------
-$languages = @{ powershell = 'PowerShell'; sql = 'SQL'; text = 'Text'; json = 'JSON'; '' = 'Code' }
+$languages = @{ powershell = 'PowerShell'; psd1 = 'Configuration file - not a console command'; sql = 'SQL'; text = 'Text'; json = 'JSON'; '' = 'Code' }
 $html = [regex]::Replace($html, '(?s)<pre><code(?: class="language-([\w-]+)")?>(.*?)</code></pre>', {
         param($m)
         $lang = $m.Groups[1].Value
@@ -175,11 +175,28 @@ $html = [regex]::Replace($html, '<p><img src="([^"]+)" alt="([^"]*)" /></p>', {
         "<figure><img loading=""lazy"" src=""$src"" alt=""$($m.Groups[2].Value)"" title=""Click to enlarge""><figcaption>$($m.Groups[2].Value)</figcaption></figure>"
     })
 $html = $html -replace '<a href="(https?://[^"]+)"', '<a href="$1" target="_blank" rel="noopener"'
-# Link to another guide: its HTML file, and the id given to the heading here (GitHub anchors keep the
-# chapter number and turn " — " into "--"; the ids of this page do not).
+# GitHub and ConvertFrom-Markdown do not generate the same heading IDs (numbers, dots and punctuation).
+$guideAnchors = @{}
+function Resolve-GuideAnchor([string]$Name, [string]$Anchor) {
+    if (-not $Anchor) { return '' }
+    if (-not $guideAnchors.ContainsKey($Name)) {
+        $targetSource = Join-Path $docs "$Name.md"
+        if (-not (Test-Path -LiteralPath $targetSource -PathType Leaf)) { throw "Linked guide not found: $targetSource" }
+        $targetHtml = (ConvertFrom-Markdown -LiteralPath $targetSource).Html
+        $map = @{}
+        foreach ($heading in [regex]::Matches($targetHtml, '<h[1-6] id="([^"]+)">(.*?)</h[1-6]>')) {
+            $headingText = [Net.WebUtility]::HtmlDecode(($heading.Groups[2].Value -replace '<[^>]+>', ''))
+            $githubId = ($headingText -replace '[^\w -]', '').ToLowerInvariant().Replace(' ', '-')
+            $map[$githubId] = $heading.Groups[1].Value
+        }
+        $guideAnchors[$Name] = $map
+    }
+    if (-not $guideAnchors[$Name].ContainsKey($Anchor)) { throw "Linked heading not found: $Name.md#$Anchor" }
+    return $guideAnchors[$Name][$Anchor]
+}
 $html = [regex]::Replace($html, '<a href="([\w.-]+)\.md(?:#([^"]*))?"', {
         param($m)
-        $anchor = ($m.Groups[2].Value -replace '^\d+-', '' -replace '-{2,}', '-')
+        $anchor = Resolve-GuideAnchor $m.Groups[1].Value $m.Groups[2].Value
         '<a href="' + $m.Groups[1].Value + '.html' + $(if ($anchor) { '#' + $anchor } else { '' }) + '"'
     })
 $html = $html -replace '<p class="markdown-alert-title"><svg viewBox="0 0 16 16"', '<p class="markdown-alert-title"><svg class="icon-sm" viewBox="0 0 16 16" fill="currentColor"'
@@ -291,14 +308,15 @@ aside a.active { background: var(--cp-accent-soft); border-left-color: var(--cp-
 aside a.active .nav-badge { background: var(--cp-accent); color: var(--cp-accent-fg); border-color: var(--cp-accent); }
 
 /* ---- Main -------------------------------------------------------------------------- */
-main { padding: 40px 56px 80px; max-width: 1080px; width: 100%; }
+main { padding: 40px 56px 80px; max-width: 1080px; width: 100%; min-width: 0; }
 .hero { position: relative; overflow: hidden; border: 1px solid var(--cp-border); border-top: 4px solid var(--cp-accent); border-radius: 16px; padding: 36px 40px 32px; margin-bottom: 40px; background: linear-gradient(125deg, var(--cp-surface) 40%, var(--cp-accent-soft)); }
 .hero::before { content: ""; position: absolute; width: 320px; height: 320px; right: -110px; top: -170px; border: 44px solid var(--cp-highlight); border-radius: 50%; pointer-events: none; }
 .hero-top { position: relative; display: flex; align-items: center; gap: 18px; }
+.hero-top > div:not(.hero-logo) { min-width: 0; }
 .hero-logo { width: 60px; height: 60px; border-radius: 16px; display: grid; place-items: center; background: var(--cp-accent); color: var(--cp-accent-fg); flex-shrink: 0; }
 .hero-logo .icon { width: 32px; height: 32px; }
 .eyebrow, .section-eyebrow { font-size: 11.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cp-accent); }
-.hero h1 { font-size: 38px; font-weight: 700; letter-spacing: -0.025em; line-height: 1.1; margin: 4px 0 0; }
+.hero h1 { font-size: 38px; font-weight: 700; letter-spacing: -0.025em; line-height: 1.1; margin: 4px 0 0; overflow-wrap: anywhere; }
 #theme { margin-left: auto; padding: 8px 10px; display: grid; place-items: center; }
 .badges { position: relative; display: flex; flex-wrap: wrap; gap: 8px; margin: 22px 0 18px; }
 .badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 999px; font-size: 12.5px; background: var(--cp-surface); border: 1px solid var(--cp-border); color: var(--cp-text-muted); }
@@ -313,7 +331,7 @@ main { padding: 40px 56px 80px; max-width: 1080px; width: 100%; }
 .section-head { display: flex; align-items: center; gap: 16px; padding-bottom: 18px; margin-bottom: 8px; border-bottom: 1px solid var(--cp-border); }
 .section-icon { width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center; background: var(--cp-accent-soft); color: var(--cp-accent); flex-shrink: 0; }
 .section-icon .icon { width: 26px; height: 26px; }
-.section h2 { font-size: 25px; font-weight: 700; letter-spacing: -0.02em; margin: 2px 0 0; line-height: 1.2; }
+.section h2 { font-size: 25px; font-weight: 700; letter-spacing: -0.02em; margin: 2px 0 0; line-height: 1.2; overflow-wrap: anywhere; }
 .section-body > :first-child { margin-top: 16px; }
 h3 { font-size: 17.5px; font-weight: 650; margin: 36px 0 12px; padding-left: 12px; border-left: 3px solid var(--cp-accent); line-height: 1.3; }
 p { margin: 12px 0; } ul, ol { padding-left: 22px; } li { margin: 6px 0; } li::marker { color: var(--cp-accent); }
@@ -389,6 +407,23 @@ footer { margin-top: 48px; padding-top: 20px; border-top: 1px solid var(--cp-bor
   aside { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--cp-border); }
   main { padding: 24px 16px 60px; } .section { padding: 24px 20px; } .hero { padding: 28px 22px; }
 }
+@media (max-width: 600px) {
+  .hero-top { flex-wrap: wrap; gap: 12px; }
+  .hero-top > div:not(.hero-logo) { flex: 1; }
+  .hero-logo { width: 40px; height: 40px; border-radius: 10px; }
+  .hero-logo .icon { width: 24px; height: 24px; }
+  .hero h1 { font-size: 28px; }
+  .hero #theme { position: absolute; right: 0; top: -12px; }
+  .hero .eyebrow { padding-right: 36px; }
+  .badges { gap: 6px; }
+  .badge { padding: 4px 8px; }
+  .section-head { align-items: flex-start; gap: 12px; }
+  .section-icon { width: 36px; height: 36px; }
+  .section-icon .icon { width: 22px; height: 22px; }
+  .section h2 { font-size: 22px; }
+  p, li { overflow-wrap: anywhere; }
+  .code pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+}
 @media print {
   body { display: block; background: #fff; } aside, #to-top, #theme, .copy { display: none !important; }
   main { padding: 0; max-width: none; } .section { break-inside: avoid-page; box-shadow: none; } .part { break-before: page; }
@@ -421,7 +456,7 @@ footer { margin-top: 48px; padding-top: 20px; border-top: 1px solid var(--cp-bor
   document.querySelectorAll("section.section").forEach(s => observer.observe(s));
   // Copy buttons.
   document.querySelectorAll(".code .copy").forEach(button => button.addEventListener("click", async () => {
-    const text = button.closest(".code").querySelector("pre").innerText;
+    const text = button.closest(".code").querySelector("pre").textContent;
     try { await navigator.clipboard.writeText(text); }
     catch { const r = document.createRange(); r.selectNodeContents(button.closest(".code").querySelector("pre")); const s = getSelection(); s.removeAllRanges(); s.addRange(r); document.execCommand("copy"); s.removeAllRanges(); }
     const label = button.querySelector("span"); label.textContent = "Copied"; button.classList.add("done");

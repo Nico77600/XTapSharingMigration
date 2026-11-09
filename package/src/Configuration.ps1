@@ -14,24 +14,28 @@ $script:FeatureCatalog = [ordered]@{
     FreeBusy                 = @{
         Label   = 'Free/Busy'
         Targets = @('Partner')
+        AllResourceType = 'user'
         Levels  = [ordered]@{ Basic = 'crossTenantCalendarAvailabilityBasic'; LimitedDetails = 'crossTenantCalendarAvailabilityLimitedDetails' }
         Text    = @{ Basic = 'free/busy, time only'; LimitedDetails = 'free/busy with subject and location' }
     }
     MailTips                 = @{
         Label   = 'MailTips'
         Targets = @('Partner')
+        AllResourceType = 'user'
         Levels  = [ordered]@{ Limited = 'crossTenantMailTipsLimited'; All = 'crossTenantMailTipsAll' }
         Text    = @{ Limited = 'MailTips that prevent an NDR or show an automatic reply'; All = 'all MailTips' }
     }
     CalendarSharing          = @{
         Label   = 'Calendar sharing'
         Targets = @('Partner', 'Default')
+        AllResourceType = 'group'
         Levels  = [ordered]@{ Simple = 'crossTenantCalendarSharingFreeBusySimple'; Detail = 'crossTenantCalendarSharingFreeBusyDetail'; Reviewer = 'crossTenantCalendarSharingFreeBusyReviewer' }
         Text    = @{ Simple = 'calendar shared, time only'; Detail = 'calendar shared with subject and location'; Reviewer = 'calendar shared with all details' }
     }
     AnonymousCalendarSharing = @{
         Label   = 'Anonymous calendar publishing'
         Targets = @('Default')
+        AllResourceType = 'group'
         Levels  = [ordered]@{ Simple = 'anonymousCalendarSharingFreeBusySimple'; Detail = 'anonymousCalendarSharingFreeBusyDetail'; Reviewer = 'anonymousCalendarSharingFreeBusyReviewer' }
         Text    = @{ Simple = 'published calendar, time only'; Detail = 'published calendar with subject and location'; Reviewer = 'published calendar with all details' }
     }
@@ -45,6 +49,12 @@ $script:ExchangeLevelMap = @{
 }
 
 function Get-XsmFeatureNames { return @($script:FeatureCatalog.Keys) }
+
+function Get-XsmAllResourceType {
+    param([Parameter(Mandatory)][string]$Feature)
+    if (-not $script:FeatureCatalog.Contains($Feature)) { throw "Unknown feature '$Feature'." }
+    return $script:FeatureCatalog[$Feature].AllResourceType
+}
 
 function Get-XsmCapabilityName {
     <# Graph capability name of a feature and level, e.g. FreeBusy + Basic -> crossTenantCalendarAvailabilityBasic. #>

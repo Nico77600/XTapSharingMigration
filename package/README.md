@@ -1,54 +1,82 @@
 # X-TAP Sharing Migration
 
-Inventories Exchange Online organization relationships, sharing policies and availability address spaces, then configures the equivalent Microsoft 365 cross-tenant access policy in two phases.
+**Author:** Nicolas Fabert
 
-This folder contains everything needed to run the tool: Invoke-XTapSharingMigration.ps1, the module, the configuration, the report template and the guide. Tests and build tools stay outside it, in the repository.
+Read your existing Exchange Online sharing settings, review a plan, then configure Microsoft 365 X-TAP in two phases. Start with the inventory: it changes nothing in the tenant.
 
-> [!IMPORTANT]
-> Files downloaded from the Internet may be blocked by Windows. Unblock them once, from this folder:
->
-> ```powershell
-> Get-ChildItem . -Recurse -File | Unblock-File
-> ```
+**New here?** Double-click [the user guide](docs/XTapSharingMigration-UserGuide.html). It explains every step, including where to type commands and which account to use.
+
+[Latest release](https://github.com/Nico77600/XTapSharingMigration/releases/latest) &middot; [What's new](https://github.com/Nico77600/XTapSharingMigration/blob/main/CHANGELOG.md) &middot; [Project](https://github.com/Nico77600/XTapSharingMigration)
 
 ## Requirements
-- PowerShell 7.4 or later.
-- Microsoft.Graph.Authentication 2.25+ for every run.
-- ExchangeOnlineManagement 3.9+ for Collect only.
-- Read permissions for Collect and Plan.
-- Security or Global Administrator for Entra changes; Exchange or Global Administrator for Exchange changes.
+
+| Item | What you need |
+|---|---|
+| Console | **PowerShell 7.4+**, not Windows PowerShell 5.1 |
+| Modules | `Microsoft.Graph.Authentication` 2.25+; `ExchangeOnlineManagement` for Collect (install 3.10.1+) |
+| Read-only inventory | An Exchange administrator with read access to sharing settings and the Graph read permissions explained in the guide |
+| Apply, Entra phase | Security Administrator plus Groups Administrator for new groups, or Global Administrator |
+| Apply, Exchange phase | Exchange Administrator or Global Administrator |
+| Coordination | The partner's confirmed tenant ID and an agreed test plan |
 
 ## Quick start
-```powershell
-notepad .\config\XTapSharingMigration.config.psd1          # Tenant.TenantId, Tenant.Organization
 
-.\Invoke-XTapSharingMigration.ps1                           # inventory (read-only)
-.\Invoke-XTapSharingMigration.ps1 -Mode Plan                # what would be configured (read-only)
-.\Invoke-XTapSharingMigration.ps1 -Mode Apply -Phase Entra     # groups and trusts
-.\Invoke-XTapSharingMigration.ps1 -Mode Apply -Phase Exchange  # Free/Busy, MailTips, calendar sharing
-.\Invoke-XTapSharingMigration.ps1 -Mode Plan -Feature FreeBusy, MailTips   # only some features
+### 1. Open the right folder
+
+Extract the release ZIP. Open **PowerShell 7** and go to the folder that directly contains `Invoke-XTapSharingMigration.ps1`. Replace the example path with your extraction path:
+
+```powershell
+Set-Location 'C:\Tools\XTapSharingMigration'
+Get-ChildItem . -Recurse -File -Force | Unblock-File
+$PSVersionTable.PSVersion
 ```
 
+**Expected:** version 7.4 or later. If the script is not in this folder, find the correct extracted folder before continuing. In a source checkout only, the runtime files are under `package`.
+
+### 2. Install the modules and fill in your tenant
+
+```powershell
+Install-Module Microsoft.Graph.Authentication -MinimumVersion 2.25.0 -Scope CurrentUser -Force
+Install-Module ExchangeOnlineManagement -MinimumVersion 3.10.1 -Scope CurrentUser -Force
+notepad .\config\XTapSharingMigration.config.psd1
+```
+
+In the existing `Tenant` section, enter your **tenant ID** and **`xxx.onmicrosoft.com` domain**, then save. Do not paste configuration sections into the console. The user guide shows where to find the values.
+
+### 3. Run only the inventory
+
+```powershell
+.\Invoke-XTapSharingMigration.ps1
+```
+
+**Expected:** sign-in prompts, then a Collect folder with `Inventory.html`. Open it. **No tenant configuration has changed.**
+
+**If it fails:** read the last error; use the troubleshooting chapter of the user guide. Do not disable existing sharing or change `Keep` to `Replace` to make an error disappear.
+
+### 4. Review before changing anything
+
+Continue in [the user guide](docs/XTapSharingMigration-UserGuide.html): confirm the partner, review Plan, then Apply Entra and Apply Exchange separately. Each Apply changes the tenant only after confirmation. The tool never executes the manual Exchange cutover.
+
+Calendar Sharing uses a group of each policy's collected mailboxes by default. Choosing `All` is a deliberate tenant-wide change. A configuration readback does not prove a real share works; test with the partner before retiring legacy rules.
+
 ## Content
-| Item | Role |
-|---|---|
-| `config\` | Example configuration file. |
-| `docs\` | User and developer guides in Markdown and HTML, with images. |
-| `src\` | Module code, one file per stage. |
-| `templates\` | HTML report template. |
-| `Invoke-XTapSharingMigration.ps1` | Entry script to run. |
-| `XTapSharingMigration.psd1` | PowerShell module manifest. |
-| `XTapSharingMigration.psm1` | PowerShell module loader. |
-| `LICENSE` | MIT license. |
-| `README.md` | This package quick start. |
+
+- **Run:** `Invoke-XTapSharingMigration.ps1`.
+- **Keep together:** the module files `XTapSharingMigration.psd1`, `XTapSharingMigration.psm1`, and the `src` and `templates` folders.
+- **Edit your choices:** `config\XTapSharingMigration.config.psd1`.
+- **Read offline:** the user and technical HTML guides in `docs`.
+- **Project information:** this `README.md` and the MIT `LICENSE`.
+
+The release also includes `CHANGELOG.md`. The source repository additionally contains Markdown guides, images, tests and build tools; those are not all shipped in the runtime ZIP. Runtime paths remain unchanged.
 
 ## Documentation
-- [User guide](docs/XTapSharingMigration-UserGuide.md) - also `docs/XTapSharingMigration-UserGuide.html`, a single file to open locally
-- [Developer guide](docs/XTapSharingMigration-Guide.md) - also `docs/XTapSharingMigration-Guide.html`
 
-Project page, releases and change log: https://github.com/Nico77600/XTapSharingMigration
+- [User guide — open locally](docs/XTapSharingMigration-UserGuide.html)
+- [Technical guide — open locally](docs/XTapSharingMigration-Guide.html)
+- [User guide — read on GitHub](https://github.com/Nico77600/XTapSharingMigration/blob/main/package/docs/XTapSharingMigration-UserGuide.md)
+- [Latest release — choose the project ZIP under Assets](https://github.com/Nico77600/XTapSharingMigration/releases/latest)
 
-License: [MIT](LICENSE).
+Reports, inventories and logs contain organization data. Keep them private and remove sensitive values before requesting help.
 
 ## Disclaimer
 

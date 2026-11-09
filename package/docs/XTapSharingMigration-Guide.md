@@ -1,14 +1,18 @@
 ---
 title: X-TAP Sharing Migration
 subtitle: Developer guide
-version: 1.0.3
+version: 1.0.4
 author: Nicolas Fabert
-updated: 2026-10-08
+updated: 2026-11-09
 ---
 
 # X-TAP Sharing Migration — Developer guide
 
 > Moves cross-tenant **Free/Busy, MailTips and calendar sharing** from Exchange Online organization relationships, sharing policies and availability address spaces to the **Microsoft 365 cross-tenant access policy (X-TAP)** — for **one tenant**, in **two phases** that different administrators can run. The commands of every day, from the first inventory to the cutover, are in the [user guide](XTapSharingMigration-UserGuide.md).
+
+[Latest release](https://github.com/Nico77600/XTapSharingMigration/releases/latest) · [What's new](https://github.com/Nico77600/XTapSharingMigration/blob/main/CHANGELOG.md) · [Beginner walkthrough](XTapSharingMigration-UserGuide.md)
+
+This technical reference describes version 1.0.4. For an installed release, start with the HTML user guide included in its ZIP.
 
 > [!IMPORTANT]
 > Files downloaded from the Internet may be blocked by Windows and fail to run. Before using this project, unblock every file in the downloaded folder:
@@ -19,7 +23,7 @@ updated: 2026-10-08
 >
 > Replace the example path with the folder where you downloaded or extracted this project.
 >
-> The `Install-Module` commands in this documentation use `-Force`, so they also update or reinstall a module that is already installed. If an older version still conflicts, close every PowerShell window, open a new one (as administrator for `-Scope AllUsers`), run `Uninstall-Module <ModuleName> -AllVersions -Force`, then run the `Install-Module` command again.
+> The `Install-Module` commands can update an installed module. Close and reopen PowerShell 7 after an update before retrying. Do not remove all installed versions as a first troubleshooting step; other scripts may depend on them.
 
 ```cards
 search | What it reads | The Exchange Online sharing configuration and the current Microsoft 365 X-TAP of the tenant — **read-only**.
@@ -36,18 +40,18 @@ Confirm the partners | Exchange tenant IDs with each partner and paste the `Part
 Plan | `.\Invoke-XTapSharingMigration.ps1 -Mode Plan` — what would be configured, compared with the tenant. Nothing changes.
 Apply, phase Entra | `-Mode Apply -Phase Entra` — groups and trusts (Security / Groups Administrator).
 Apply, phase Exchange | `-Mode Apply -Phase Exchange` — Free/Busy, MailTips, calendar sharing (Exchange Administrator). Two administrators: the same Collect folder for both phases (chapter 8).
-Cut over with each partner | Manual: contact the partner, plan the window, disable the old objects with the commands of the reports, test — chapter 11.
+Cut over with each partner | Manual and feature-specific: verify Calendar Sharing with Sharing Policies enabled, then review any legacy retirement commands and dependencies — chapter 11.
 ```
 
 > [!IMPORTANT]
-> The tool **never changes an Exchange Online object** and **never deletes** anything. Organization relationships, sharing policies and availability address spaces keep working — and keep taking precedence over X-TAP — until you run the cutover commands yourself, in a window agreed with each partner.
+> The tool **never changes an Exchange Online object** and **never deletes** anything. Legacy relationships/address spaces take precedence for Free/Busy and MailTips; applicable **X-TAP Calendar Sharing takes precedence over Sharing Policies**. Test Calendar Sharing with Sharing Policies enabled. Their retirement is not a prerequisite; preserve wildcard rules for on-premises/hybrid dependencies.
 
 # Part I · Understand
 
 <!-- icon: book -->
 ## 1. Why this tool
 
-Sharing Free/Busy, MailTips and calendars with another Microsoft 365 organization through an **organization relationship** or a **sharing policy** relies on **Exchange Web Services (EWS)**, which is being retired in Exchange Online. Microsoft replaces these objects with the **Microsoft 365 cross-tenant access policy** (X-TAP): an Entra trust per partner tenant, plus **capabilities** that say what the partner can see, and for which users.
+Microsoft is moving cross-tenant Free/Busy, MailTips and calendar sharing to the **Microsoft 365 cross-tenant access policy** (X-TAP) as legacy EWS-based sharing paths are retired: an Entra trust per partner tenant, plus **capabilities** that say what the partner can see, and for which users. **Anonymous HTML/ICS publishing does not depend on EWS.**
 
 Microsoft documents the migration step by step ([Migrate to Microsoft 365 Cross-Tenant Access Policy](https://learn.microsoft.com/exchange/sharing/migrate-to-m365-xtap)). In a real tenant the hard part is not the commands, it is the **inventory**: which relationships are still used, which belong to the Exchange hybrid configuration, which partner hides behind which domain, which sharing policy is assigned to which mailboxes. This tool automates that part and keeps a written trace of every decision.
 
@@ -59,7 +63,7 @@ split | Two phases, two administrators | **Entra** (trusts, groups) and **Exchan
 search | Read first | `Collect` and `Plan` change nothing. `Apply` shows every change, asks for a typed confirmation, then reads the tenant again to verify.
 shield | Nothing lost | No delete. A capability configured by hand is **kept** (`Apply.ExistingCapability = Keep`), a trust restricted by hand is never widened. Microsoft Graph **v1.0** only.
 handshake | Partners confirmed | X-TAP is **inbound**: your tenant decides what the partner sees of **your** users. No trust is created for a partner whose tenant ID is not confirmed.
-undo | Manual cutover | Disabling the old objects is coordinated with each partner and done by hand: the reports give the commands, the rollback and the tests.
+undo | Manual cutover | Review each feature with the partner. Test Calendar Sharing with Sharing Policies enabled; retire legacy rules only after checking replacement functionality and hybrid dependencies.
 ```
 <!-- icon: flow -->
 ## 2. How it works
@@ -87,7 +91,7 @@ key | Apply · Entra | groups, trusts
 arrow | phase 2 | Exchange admin
 mail | Apply · Exchange | capabilities
 arrow | manual | with each partner
-undo | Cutover | old objects off
+undo | Cutover | feature-specific review
 ```
 
 | Mode | Reads | Writes in the tenant | Files |
@@ -100,7 +104,7 @@ undo | Cutover | old objects off
 Every run writes into `output\<tenant>\<date>_<mode>`. Plan and Apply use the most recent Collect of the tenant unless `-SnapshotPath` is given.
 
 > [!NOTE]
-> **When phase Entra has nothing to do.** A trust is needed only for a **named partner tenant** — an organization relationship, an availability address space forced in, or a `domain:` entry of a sharing policy — and a security group only for a scope other than *All users*. The **Anonymous** (`Anonymous:…`) and **all organizations** (`*:…`) entries of a sharing policy go to the **default policy**: with a single sharing policy in use, they are scoped to *All users* and need neither. Phase Entra then ends with **Phase Entra - nothing to change**, the reason (*not needed - only default-policy capabilities for All users*) and the next command, `-Mode Apply -Phase Exchange`. Several sharing policies in use still need one group per policy (chapter 3).
+> **When phase Entra has nothing to do.** Every Sharing Policy defaults to a group of its collected mailbox assignments, even a single policy. **Anonymous** (`Anonymous:…`) and **all organizations** (`*:…`) capabilities go to the **default policy**. If an administrator explicitly chooses `All` for only those entries, no scope group or named-partner trust is created and phase Entra may have nothing to change. Wildcard sharing still requires effective Microsoft 365 collaboration trust: inspect default trust and partner overrides manually. Anonymous publishing has no named partner.
 
 ![The inventory in the console](images/console-collect.png)
 
@@ -156,9 +160,13 @@ Each **item** of the inventory is one feature of one Exchange object for one par
 > [!NOTE]
 > Other uses of an organization relationship — mailbox moves, archive access, delivery reports, photos — are **not** migrated. The inventory says so on the item, and the cutover commands warn before disabling such a relationship.
 
-### Several sharing policies
+### A mailbox group for each Sharing Policy
 
-When more than one sharing policy is assigned to mailboxes, the users of each policy must keep their own level. Microsoft's answer is a **security group per policy**: the tool proposes the scope `SharingPolicy:<name>`, and the Entra phase creates an assigned group `SG-XTAP-SharingPolicy-<name>` with the mailboxes found at collection time (members are added on later runs, never removed). If you prefer `All` or a dynamic group, force the scope in the configuration.
+For **every Sharing Policy**, even a single policy, the users must keep their own level and scope. The tool proposes `SharingPolicy:<name>` and creates an assigned security group `SG-XTAP-SharingPolicy-<name>` with collected mailbox assignments, including inherited default-policy assignments. Missing/incomplete assignment data blocks automatic group use; a policy with zero assignments is excluded by default, including the default policy. Missing members can be added on later runs; extra members block automatic group use and dependent capabilities pending review. Members are never removed automatically. Run a fresh Collect and review membership when assignments change. If you prefer `All` or a separately managed dynamic group, explicitly override the scope in the configuration or `Selection.csv`.
+
+Policies mapped to the same capability and level contribute their groups to one included-scope list. Simple, Detail and Reviewer remain distinct levels; an explicit administrator choice can override the discovered level or scope. The collector inventories user, shared, room and equipment mailbox assignments. Configuration readback verifies stored settings, not actual sharing behavior.
+
+**Explicit tenant-wide scope.** `All` emits `resourceId = 'All'` with `resourceType = 'group'` for both Calendar Sharing and Anonymous, following the Exchange migration examples; Free/Busy and MailTips retain `All/user`. Scope comparison includes both fields: `All/user` is not silently treated as `All/group`. Keep reports a conflict; Merge requires explicit Replace for a differently typed All. An explicit All includes mailboxes outside the original policy and future mailboxes. Older snapshots' implicit All is no longer used as a discovered policy scope; start with a fresh Collect and review any previously saved selection or configuration overrides.
 
 <!-- icon: globe -->
 ## 4. Partner tenants and their tenant ID
@@ -223,8 +231,8 @@ Install-Module ExchangeOnlineManagement -MinimumVersion 3.10.1 -Scope CurrentUse
 |---|---|---|
 | `Collect` | Exchange: a role that can run the `Get-` cmdlets (View-Only Organization Management, Global Reader, Exchange Administrator) | `Policy.Read.All`, `CrossTenantInformation.ReadBasic.All`, `Group.Read.All` |
 | `Plan` | any of the roles below, read-only use | `Policy.Read.All`, `Group.Read.All` |
-| `Apply -Phase Entra` | **Security Administrator** (least-privileged role of the Graph API for partner policies) or Global Administrator, and **Groups Administrator** when groups are created | `Policy.ReadWrite.CrossTenantAccess`, `Group.ReadWrite.All` (or `Group.Read.All` when no group is created) |
-| `Apply -Phase Exchange` | **Exchange Administrator** (supported for Free/Busy, MailTips and calendar sharing) or Global Administrator | `Policy.ReadWrite.CrossTenantCapability`, `Group.Read.All` |
+| `Apply -Phase Entra` | **Security Administrator** (least-privileged role of the Graph API for partner policies) or Global Administrator, and **Groups Administrator** when groups are created | `Policy.Read.All`, `Policy.ReadWrite.CrossTenantAccess`, `Group.ReadWrite.All` (or `Group.Read.All` when no group is created) |
+| `Apply -Phase Exchange` | **Exchange Administrator** (supported for Free/Busy, MailTips and calendar sharing) or Global Administrator | `Policy.Read.All`, `Policy.ReadWrite.CrossTenantCapability`, `Group.Read.All` |
 
 The first sign-in asks for consent to these permissions for the **Microsoft Graph Command Line Tools** application (or your own application, `Authentication.GraphClientId`).
 
@@ -234,6 +242,10 @@ The first sign-in asks for consent to these permissions for the **Microsoft Grap
 <!-- icon: download -->
 ## 6. Installation
 
+**To run the tool:** download `XTapSharingMigration-<version>.zip` under **Assets** of [the latest release](https://github.com/Nico77600/XTapSharingMigration/releases/latest), extract it, and open `docs\XTapSharingMigration-UserGuide.html`. Do not choose GitHub's Source code archives. Run commands from the extracted folder containing the entry script; there is no extra `package` level in the release.
+
+**For development only:** clone the source repository and work in its `package` subfolder for runtime commands:
+
 ```powershell
 git clone https://github.com/Nico77600/XTapSharingMigration.git
 cd XTapSharingMigration\package
@@ -241,7 +253,7 @@ notepad .\config\XTapSharingMigration.config.psd1    # Tenant.TenantId, Tenant.O
 .\Invoke-XTapSharingMigration.ps1                     # first inventory
 ```
 
-Or download the zip of a [release](https://github.com/Nico77600/XTapSharingMigration/releases): it contains the same run-time files as `package\`, with the HTML guide.
+The source contains Markdown guides and images; the runtime release distributes the self-contained HTML guides. Tests and build tools remain outside the runtime package. Replace example tenant values before running the inventory; do not jump to Apply after cloning.
 
 | Folder | Content |
 |---|---|
@@ -491,7 +503,7 @@ Each run writes one self-contained HTML file — no external resource, so it can
 <!-- icon: handshake -->
 ## 11. After the script — partner, window, cutover, tests
 
-When `Apply` is finished, X-TAP is **configured but not used**: organization relationships, availability address spaces and sharing policies take precedence over it. What remains is a change, done by hand and coordinated with each partner. The tool prepares it — `ManualCutover.txt`, `PartnersToConfirm.txt`, the reports — but runs none of it.
+When `Apply` is finished, readback verifies **stored configuration**, not propagation or runtime functionality. Legacy relationships/address spaces take precedence for Free/Busy and MailTips; applicable X-TAP Calendar Sharing capabilities take precedence over Sharing Policies. Test Calendar Sharing **with those policies enabled**. Retire legacy rules only after replacement functionality and on-premises/hybrid dependencies have been verified. The tool prepares review-only commands in `ManualCutover.txt` and the reports, but runs none of them; wildcard Sharing Policy commands, including cleanup, are commented out.
 
 ```flow
 search | Rollout | both tenants
@@ -500,7 +512,7 @@ handshake | Partner | who configures what
 arrow | plan |
 calendar | Window | tests, GO / STOP
 arrow | both sides |
-undo | Cutover | old objects off
+undo | Cutover | feature-specific review
 arrow | test |
 check | GO or rollback | vs the baseline
 arrow | later |
@@ -509,13 +521,13 @@ refresh | Clean up | Collect again
 
 ### 1 · Is the feature available in both tenants?
 
-Microsoft rolls out the X-TAP capabilities feature by feature and cloud by cloud, and asks to migrate only **after** the rollout has completed in the environment of **both** tenants. Schedule published by the Exchange team (worldwide environment, blog post updated 29 September 2026):
+Microsoft rolls out the X-TAP capabilities feature by feature and cloud by cloud, and asks to migrate only **after** the rollout has completed in the environment of **both** tenants. Schedule published by the Exchange team (worldwide environment, Calendar Sharing date updated 29 October 2026; an expected date is not proof of availability in a particular tenant):
 
 | Feature | Rollout begins | Expected completion |
 |---|---|---|
 | Free/Busy | August 2026 | 23 September 2026 |
 | MailTips | August 2026 | 29 September 2026 |
-| Calendar sharing | August 2026 | 15 October 2026 |
+| Calendar sharing | August 2026 | 9 November 2026 |
 
 GCC, GCC High and DoD: rollout paused at the time of writing. Check the current status in Message Center (**MC1446796**) and in the post [Cross-tenant Free/Busy, MailTips, and Calendar Sharing are moving to Cross-Tenant Access Policy](https://techcommunity.microsoft.com/blog/exchange/cross-tenant-freebusy-mailtips-and-calendar-sharing-are-moving-to-cross-tenant-a/4545169). A feature that is not yet available: leave it out with `-Feature` (chapter 8) and migrate it later.
 
@@ -524,7 +536,7 @@ GCC, GCC High and DoD: rollout paused at the time of writing. Check the current 
 
 ### 2 · Contact each partner
 
-X-TAP is **inbound**: what you configured is what the partner sees of **your** users. What your users see of the partner depends on the partner's own configuration — and on one-way sharing, only the tenant that holds the mailboxes configures X-TAP. In every case, **both** sides must disable their old objects, or they keep taking precedence.
+X-TAP is **inbound**: what you configured is what the partner sees of **your** users. What your users see of the partner depends on the partner's own configuration — and on one-way sharing, only the tenant that holds the mailboxes configures X-TAP. Coordinate Free/Busy and MailTips cutover per direction. Disabling Sharing Policies is **not** a prerequisite for X-TAP Calendar Sharing.
 
 Send each partner (values from `PartnersToConfirm.txt` and the **Partners** tab):
 
@@ -541,10 +553,10 @@ Expected on your side for our tenant ID, if our users must keep seeing yours:
   - the capabilities matching your current organization relationship / sharing policy for our domains
   - (availability address space on our side) crossTenantCalendarAvailabilityBasic for our tenant ID
 
-Proposed window: <date, time, time zone> - both sides disable the old objects at the same time, then test.
+Proposed window: <date, time, time zone> - verify Calendar Sharing with Sharing Policies enabled; coordinate any legacy Free/Busy and MailTips cutover.
 Test accounts on our side: <in scope>, <out of scope>, <with an automatic reply>.
 Your test accounts, please: same three.
-Rollback: re-enable the old objects (commands ready on our side).
+Rollback: restore the agreed feature-specific baseline. Re-enabling a Sharing Policy does not override applicable X-TAP capabilities.
 ```
 
 ### 3 · Plan the window
@@ -557,7 +569,7 @@ Rollback: re-enable the old objects (commands ready on our side).
 | Baseline | **Before** the window, run the tests below with the old path and keep the result (screenshots: which details appear in the Scheduling Assistant, which MailTips). After the cutover, the result must be the same. |
 | GO / STOP | Written in advance: which tests must pass, how long to wait before deciding, what makes you roll back. |
 | Rollback owner | Who runs the rollback commands, on each side. |
-| Change record | Attach `Inventory.html` (initial picture), `Plan.html`, `Result-*.html`, `ManualCutover.txt`. Tell the helpdesk. |
+| Change record | Keep each run's `Inventory.html` (initial picture), `Plan.html`, `Result.html`, `ManualCutover.txt` privately with the change record. Tell the helpdesk through an approved channel. |
 
 ### 4 · Pre-checks
 
@@ -569,12 +581,12 @@ Rollback: re-enable the old objects (commands ready on our side).
 
 ### 5 · Cutover
 
-Both sides run their commands in the same window — note the time of each one. For each Exchange object whose items are migrated, the **Manual cutover** tab and `ManualCutover.txt` give:
+Coordinate both sides in the same window and note each change. Before retiring Sharing Policy entries, verify actual replacement sharing, effective trust, intended in/out-of-scope behavior and any on-premises/hybrid dependencies. Offered detail levels alone do not prove invitation, acceptance or calendar access. For reviewed legacy retirement, the **Manual cutover** tab and `ManualCutover.txt` give:
 
 | Object | Cutover | Rollback |
 |---|---|---|
 | Organization relationship | `Set-OrganizationRelationship -Enabled $false` | `-Enabled $true` |
-| Sharing policy | `Set-SharingPolicy -Domains <entries not migrated>`, or `-Enabled $false` when nothing remains | `Set-SharingPolicy -Domains <original entries>` (+ `-Enabled $true`) |
+| Sharing policy | Optional retirement only after replacement functionality is verified; wildcard commands stay commented out pending dependency review | Restore original entries/enabled state; this alone does not override applicable X-TAP capabilities |
 | Availability address space | `Export-Clixml`, then `Remove-AvailabilityAddressSpace` (it cannot be disabled) — only once the partner has configured its side | `Add-AvailabilityAddressSpace` from the export |
 
 The warnings say when disabling an object also stops something not migrated (other partner of the same relationship, feature left out with `-Feature`, mailbox moves, `ContactsSharing` …). `Collect` also exported every object to `backup\` with `Export-Clixml`.
@@ -667,7 +679,7 @@ Read | Select the request: **Preview** (or **Response**) for the answer, **Paylo
 | `CreateSharingPermission`: `ResponseCode: NoError`, a `SharingPermissionId` | ✔ | Share created, invitation sent | The partner accepts it and opens the calendar (T5) |
 | `CreateSharingPermission`: `ErrorNotAllowedExternalSharingByPolicy` — *Policy does not allow granting of permissions to external users* — Outlook on the web says that the sharing invitation could not be sent | ✖ | The share is refused | See below |
 
-In the lab, on 1 October 2026, the tenant had its sharing policy **disabled** and X-TAP allowing `crossTenantCalendarSharingFreeBusySimple` for all users, while calendar sharing through X-TAP was still rolling out (completion announced for 15 October 2026): the dialog offered *Can view when I'm busy*, and the share was **refused** with `ErrorNotAllowedExternalSharingByPolicy`. The other tenant, still on its sharing policy, created the share normally. This is why calendar sharing must not be cut over before the rollout has reached **both** tenants — `-Feature` keeps it out of the migration until then (chapter 8).
+Historical lab captures from 1 October 2026 show *Can view when I'm busy* in the dialog, followed by `ErrorNotAllowedExternalSharingByPolicy` when creating the share; the other tenant accepted creation. They demonstrate that offered levels are **not** a completed sharing workflow. They do not uniquely establish rollout state, completed propagation, scope correctness or which backend policy path was used. Do not infer the cause merely from whether a legacy Sharing Policy was enabled; compare exact configuration and native responses while preserving the fallback.
 > [!TIP]
 > To tell a **scope** problem from a **path** problem, the tenant that holds the mailboxes can temporarily allow the capability for **All** users (a `Partners` rule such as `FreeBusy = @{ Scope = 'All' }`, with `Apply.ExistingCapability = 'Replace'`): if the free/busy appears, the path works and the group is the cause. Then come back to the group.
 
@@ -678,14 +690,14 @@ In the lab, on 1 October 2026, the tenant had its sharing policy **disabled** an
 
 **GO** — every test of the matrix gives the baseline result after the agreed waiting time, the out-of-scope tests (T2) show nothing, no extra detail is exposed, both sides agree.
 
-**STOP and roll back** — an in-scope test still fails after the waiting time, a user out of the scope is visible, more details than before, a published calendar lost. Each side runs the **rollback** commands of `ManualCutover.txt` (re-enable the relationships and sharing policies, restore the address spaces from their export): the old path takes precedence again and the baseline comes back. X-TAP stays configured for the next attempt.
+**STOP and roll back** — an in-scope test still fails after the agreed observation period, a user out of scope is visible, more details than before, a published calendar lost. Restore the agreed feature-specific baseline. `ManualCutover.txt` restores legacy Exchange objects, but **re-enabling a Sharing Policy does not override applicable X-TAP Calendar Sharing capabilities**. Separately review the saved capability baseline to restore changed X-TAP scopes/levels; never reset the entire default policy. The tool does not automatically undo capabilities, groups or trusts.
 
 ### 9 · Clean up
 
 > [!CAUTION]
 > Do not remove the old objects in the cutover window. Remove them only after a stable period agreed with the partner.
 
-Then run the **cleanup** commands of `ManualCutover.txt` — `Remove-OrganizationRelationship`, and `Remove-SharingPolicy` for a policy left with no entry (never the default policy); the address spaces were already removed at the cutover, keep their export as long as you may need it — and `Collect` again: the new inventory is the closing picture of the change — the migrated items are gone from Exchange Online and **Present** in X-TAP.
+Review the **cleanup** commands of `ManualCutover.txt` only after stabilization. Wildcard Sharing Policy removal remains commented out until on-premises/hybrid dependencies are excluded; never remove the default policy. Keep address-space exports for rollback and run `Collect` again for the closing inventory. A policy-scoped capability may appear as **PresentOtherScope** in Collect because group membership is resolved during Plan; use Plan to compare the resolved scope, not the inventory label alone.
 <!-- icon: terminal -->
 ## 12. Exit codes, files and logs
 
@@ -758,7 +770,7 @@ The tests use a fictitious tenant (`tests\TestData.ps1`: Contoso and its partner
 | `No Collect run found for this tenant` | Plan or Apply on another computer, or another `Output.Path`: copy the Collect folder and give `-SnapshotPath` (chapter 8, *Two administrators*). |
 | `0 item(s) migrated` — *No change made* | Step 2 of Plan / Apply and the summary give the reason of every item not migrated. A relationship or a sharing policy **disabled** in Exchange Online (for example by an earlier cutover) is out of scope: re-enable it (rollback) and collect again, or force it in `Selection.csv` with `-SelectionPath` (chapter 9). Hybrid, on-premises and domains without a tenant cannot be forced. |
 | *Cancelled (answer …, YES expected)* | Any answer other than `YES` (any case) cancels the Apply: nothing is changed, the summary says *cancelled*, exit code `2`. Run again and type `YES`, or add `-Force`. |
-| **Phase Entra - nothing to change** | Read the *Why* line. *Not needed*: only Anonymous / `*` sharing policy entries for All users are migrated — they go to the default policy, no trust and no group are needed (chapter 2): run `-Phase Exchange`. *Already in place*: the trusts and groups exist. *No item is migrated*: see the line above. Exit code `0`. |
+| **Phase Entra - nothing to change** | Read the *Why* line. *Not needed*: only explicitly tenant-wide Anonymous / `*` entries, so no scope group or named-partner trust is created. Wildcard sharing still needs effective default/partner collaboration trust (chapter 2). *Already in place*: trusts and groups exist. *No item is migrated*: see above. Exit code `0`. |
 | Partner **Blocked**: tenant ID not confirmed | Add the `Partners` entry with the `TenantId` confirmed by the partner (chapter 4). |
 | Partner **Blocked**: MISMATCH | The domain belongs to another tenant than the one given by the partner: check with the partner before going further. |
 | Capability **Conflict** | Existing scope kept (`ExistingCapability = Keep`): set the scope for this item, or choose `Merge` / `Replace`. |

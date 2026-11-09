@@ -107,8 +107,16 @@ function Get-XsmItemDecision {
     elseif ($partnerFeature.ContainsKey('Scope')) { $d.Scope = $partnerFeature.Scope; $d.ScopeOrigin = "Partners rule '$($partnerRule.Match)'" }
     elseif ($featureRule.Scope -ne 'AsDiscovered') { $d.Scope = $featureRule.Scope; $d.ScopeOrigin = "Features.$feature.Scope" }
     else { $d.Scope = [string]$Item.DiscoveredScope; $d.ScopeOrigin = 'Exchange Online' }
+    if ($Item.Source -eq 'SharingPolicy' -and $d.ScopeOrigin -eq 'Exchange Online') {
+        # Older snapshots could assume All when only one policy was enabled or counts were missing.
+        $d.Scope = "SharingPolicy:$($Item.SourceName)"
+    }
     if ($d.Include) {
         foreach ($spec in (ConvertTo-XsmScopeSpec $d.Scope $Settings)) { if ($spec.Kind -eq 'Invalid') { $d.Problems.Add($spec.Message) } }
+        if ($Item.Source -eq 'SharingPolicy' -and
+            @((ConvertTo-XsmScopeSpec $d.Scope $Settings) | Where-Object Kind -eq 'All').Count) {
+            $d.Warnings.Add('Explicit tenant-wide Calendar Sharing scope: this includes mailboxes outside the source Sharing Policy and future mailboxes. Review the intended exposure; no per-policy group is used.')
+        }
     }
     $d.Problems = @($d.Problems); $d.Warnings = @($d.Warnings)
     return $d

@@ -30,7 +30,7 @@
 
 .NOTES
     Author  : Nicolas Fabert
-    Version : 1.0.3
+    Version : 1.0.4
     Part of : X-TAP Sharing Migration (repository tool, not in the package)
 #>
 [CmdletBinding()]
@@ -233,7 +233,8 @@ try {
     ) -join ''
     $banner = "<header class=""hero rb-hero""><div class=""rb-hero-grid""><div>" +
         "<div class=""hero-top""><div class=""hero-logo"">$(Get-ReadmeIcon 'handshake')</div><div><div class=""eyebrow"">Exchange Online $mid Microsoft 365 X-TAP $mid PowerShell</div><h1>X-TAP Sharing Migration</h1></div></div>" +
-        "<p class=""lead"">Moves cross-tenant <strong>Free/Busy, MailTips and calendar sharing</strong> from organization relationships and sharing policies to the <strong>Microsoft 365 cross-tenant access policy</strong> &mdash; inventory first, two phases, manual cutover.</p>" +
+        "<p class=""lead""><strong>Inventory first. Review the plan. Then configure sharing.</strong><br>Move Free/Busy, MailTips and calendar sharing to Microsoft 365 X-TAP, one tenant at a time.</p>" +
+        "<p class=""rb-author"">Nicolas Fabert</p>" +
         "<div class=""badges"">$badges</div></div>" +
         "<div class=""rb-stats"">" +
         "<div class=""rb-stat""><b>1</b><span><strong>tenant per run</strong>Exchange Online only</span></div>" +

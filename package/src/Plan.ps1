@@ -131,6 +131,9 @@ function New-XsmTargetState {
         An unresolved conflict blocks its items (they get a problem); the other items go on.
     #>
     param([Parameter(Mandatory)]$Snapshot, [Parameter(Mandatory)]$Settings, $Selection, [hashtable]$MailboxesByPolicy = @{}, [hashtable]$LevelChoices = @{})
+    if (-not $PSBoundParameters.ContainsKey('MailboxesByPolicy') -and $Snapshot.Directory) {
+        $MailboxesByPolicy = Import-XsmSharingPolicyMailboxes $Snapshot
+    }
     $decisions = [Collections.Generic.List[object]]::new()
     $capabilities = [ordered]@{}
     $groups = [ordered]@{}
@@ -198,7 +201,7 @@ function New-XsmTargetState {
             if (-not $groups.Contains($gk)) {
                 $req = [ordered]@{
                     Key = $gk; Kind = $spec.Kind; DisplayName = [string]$spec.DisplayName; Id = [string]$spec.Id; Create = $false
-                    MembershipRule = ''; Description = ''; MailNickname = ''; Policy = ''; MemberIds = @(); UsedBy = [Collections.Generic.List[string]]::new()
+                    MembershipRule = ''; Description = ''; MailNickname = ''; Policy = ''; MemberIds = @(); MembershipDataComplete = $true; UsedBy = [Collections.Generic.List[string]]::new()
                 }
                 switch ($spec.Kind) {
                     'Config' {
@@ -213,6 +216,11 @@ function New-XsmTargetState {
                         $req.MailNickname = Get-XsmMailNickname $spec.DisplayName
                         $members = $MailboxesByPolicy[$spec.Policy.ToLowerInvariant()]
                         $req.MemberIds = if ($members) { @($members | Sort-Object -Unique) } else { @() }
+                        $policies = @($Snapshot.Exchange.SharingPolicies | Where-Object Name -eq $spec.Policy)
+                        $req.MembershipDataComplete = $Snapshot.Exchange.MailboxAssignmentsCollected -and
+                            $policies.Count -eq 1 -and $null -ne $policies[0].Mailboxes -and
+                            $req.MemberIds.Count -eq [int]$policies[0].Mailboxes -and
+                            -not @($req.MemberIds | Where-Object { $_ -notmatch $script:GuidPattern }).Count
                     }
                 }
                 $groups[$gk] = $req
@@ -310,7 +318,8 @@ function Get-XsmLiveState {
     <#
     .SYNOPSIS
         Reads in the tenant what the target configuration needs: default policy, partner policies of the
-        target partners, groups used as scopes (and the members of the sharing policy groups when -Members).
+        target partners, groups used as scopes, and sharing-policy group members in every phase.
+        The Members switch is retained for existing callers; membership checks cannot be skipped.
     .PARAMETER KnownGroupIds
         Group key -> object ID of groups created by this execution (read by ID: the display name search
         may not find a group created a few seconds ago).
@@ -330,7 +339,7 @@ function Get-XsmLiveState {
     $live.GroupNames = Resolve-XsmGroupNames (@($live.Default.Capabilities) + @($live.Partners.Values | Where-Object { $_ } | ForEach-Object { $_.Capabilities }))
     foreach ($g in @($Target.Groups)) {
         $id = if ($KnownGroupIds.ContainsKey($g.Key)) { $KnownGroupIds[$g.Key] } else { $g.Id }
-        $live.Groups[$g.Key] = Find-XsmGroup -Id $id -DisplayName $g.DisplayName -Members:($Members -and $g.Kind -eq 'SharingPolicy')
+        $live.Groups[$g.Key] = Find-XsmGroup -Id $id -DisplayName $g.DisplayName -Members:($g.Kind -eq 'SharingPolicy')
     }
     return $live
 }
@@ -342,7 +351,7 @@ function Format-XsmLiveScope {
     param($Capability, [hashtable]$GroupNames = @{})
     if (-not $Capability) { return '-' }
     $text = @($Capability.Included | ForEach-Object {
-            if ($_.ResourceId -ieq 'All') { 'All users' }
+            if ($_.ResourceId -ieq 'All') { "All users (All/$($_.ResourceType))" }
             elseif ($GroupNames.ContainsKey(([string]$_.ResourceId).ToLowerInvariant())) { $GroupNames[([string]$_.ResourceId).ToLowerInvariant()] }
             else { "$($_.ResourceType) $($_.ResourceId)" }
         }) -join ' + '
@@ -390,16 +399,26 @@ function New-XsmActions {
         $lg = $Live.Groups[$req.Key]
         $op = 'NoChange'; $detail = ''; $after = $req.DisplayName; $before = '-'; $notes = @()
         $kindText = if ($req.Kind -eq 'SharingPolicy') { "assigned, $($req.MemberIds.Count) mailbox(es) of the sharing policy $($req.Policy)" } elseif ($req.MembershipRule) { "dynamic: $($req.MembershipRule)" } elseif ($req.Create) { 'assigned (members added by you)' } else { 'existing group' }
-        if ($lg.Ambiguous) { $op = 'Blocked'; $detail = "Several groups are named '$($req.DisplayName)': use the object ID as scope." }
+        if ($req.Kind -eq 'SharingPolicy' -and -not $req.MembershipDataComplete) {
+            $op = 'Blocked'; $detail = "Mailbox assignment data for sharing policy '$($req.Policy)' is missing or incomplete. Run Collect with Collection.MailboxAssignments = `$true, or explicitly choose a reviewed scope."
+        }
+        elseif ($lg.Ambiguous) { $op = 'Blocked'; $detail = "Several groups are named '$($req.DisplayName)': use the object ID as scope." }
         elseif ($lg.Found) {
             $before = "$($lg.DisplayName) ($($lg.Id))"
             $after = $before
             if (-not $lg.SecurityEnabled) { $op = 'Blocked'; $detail = "'$($lg.DisplayName)' is not a security group: Microsoft 365 X-TAP needs a security group." }
-            elseif ($req.Kind -eq 'SharingPolicy' -and $req.Create -and $null -ne $lg.MemberIds) {
-                $missing = @($req.MemberIds | Where-Object { $_ -notin $lg.MemberIds })
-                $extra = @($lg.MemberIds | Where-Object { $_ -notin $req.MemberIds }).Count
-                if ($missing.Count) { $op = 'AddMembers'; $detail = "$($missing.Count) mailbox(es) of the sharing policy $($req.Policy) to add"; $req['MissingIds'] = $missing }
-                if ($extra) { $notes += "$extra member(s) not in the sharing policy at collection time are kept (the tool never removes members)." }
+            elseif ($req.Kind -eq 'SharingPolicy' -and $null -ne $lg.MemberIds) {
+                $wantedMembers = [Collections.Generic.HashSet[string]]::new([string[]]$req.MemberIds, [StringComparer]::OrdinalIgnoreCase)
+                $actualMembers = [Collections.Generic.HashSet[string]]::new([string[]]$lg.MemberIds, [StringComparer]::OrdinalIgnoreCase)
+                $missing = @($req.MemberIds | Where-Object { -not $actualMembers.Contains($_) })
+                $extra = @($lg.MemberIds | Where-Object { -not $wantedMembers.Contains($_) }).Count
+                if ($extra) {
+                    $op = 'Blocked'; $detail = "$extra member(s) are outside the collected sharing policy '$($req.Policy)'. Review membership against a fresh collection before granting access; the tool never removes members."
+                }
+                elseif ($missing.Count -and $req.Create -and -not $lg.Dynamic) {
+                    $op = 'AddMembers'; $detail = "$($missing.Count) mailbox(es) of the sharing policy $($req.Policy) to add"; $req['MissingIds'] = $missing
+                }
+                elseif ($missing.Count) { $op = 'Blocked'; $detail = "The sharing policy group is missing $($missing.Count) collected mailbox(es); review its membership before granting access." }
             }
         } else {
             if ($req.Create) { $op = 'Create'; $after = "$($req.DisplayName) - security group, $kindText"; $detail = 'New security group' }
@@ -496,16 +515,27 @@ function New-XsmActions {
         if ($blockers.Count) { $op = 'Blocked'; $detail = $blockers -join ' ' }
         elseif ($existing) {
             $mode = $Settings.Apply.ExistingCapability
-            $haveIds = @($existing.Included | ForEach-Object { if ($_.ResourceId -ieq 'All') { 'all' } else { ([string]$_.ResourceId).ToLowerInvariant() } })
-            $covered = -not $pending -and ($haveIds -contains 'all' -or -not @($wantedIds | Where-Object { $_.ToLowerInvariant() -notin $haveIds }).Count)
-            $same = $existing.IsAllowed -and -not @($existing.Excluded).Count -and -not $pending -and (Test-XsmScopeMatch $existing.Included @($wantedIds))
+            $allType = Get-XsmAllResourceType $cap.Feature
+            $wantedScopes = @(foreach ($id in $wantedIds) {
+                @{ ResourceId = $id; ResourceType = $(if ($id -ieq 'All') { $allType } else { 'group' }) }
+            })
+            $haveKeys = @(Get-XsmScopeKeys $existing.Included)
+            $wantedKeys = @(Get-XsmScopeKeys $wantedScopes)
+            $wrongAllType = @($existing.Included | Where-Object { $_.ResourceId -ieq 'All' -and $_.ResourceType -ine $allType }).Count -gt 0
+            $covered = -not $pending -and -not $wrongAllType -and ($haveKeys -contains "${allType}:all" -or -not @($wantedKeys | Where-Object { $_ -notin $haveKeys }).Count)
+            $same = $existing.IsAllowed -and -not @($existing.Excluded).Count -and -not $pending -and (Test-XsmScopeMatch $existing.Included @($wantedIds) $cap.Feature)
             if ($same -or ($mode -eq 'Merge' -and $existing.IsAllowed -and -not @($existing.Excluded).Count -and $covered)) { $op = 'NoChange'; $detail = 'Already in place.' }
             elseif ($mode -eq 'Replace') { $op = 'Update'; $detail = 'The capability exists with another scope or is not allowed: replaced (Apply.ExistingCapability = Replace).' }
+            elseif ($mode -eq 'Merge' -and $wrongAllType) {
+                $op = 'Conflict'
+                $detail = "Existing All has a different resourceType. Merge cannot treat All/user and All/group as equivalent; review the scope and explicitly choose Replace to change it."
+            }
             elseif ($mode -eq 'Merge') {
                 $op = 'Update'
                 $detail = 'The capability exists with another scope or is not allowed: the target scope is added to the existing one (Apply.ExistingCapability = Merge).'
-                $wantedLower = @($wantedIds | ForEach-Object { $_.ToLowerInvariant() })
-                $extra = if ($wantedLower -contains 'all') { @() } else { @($existing.Included | Where-Object { $(if ($_.ResourceId -ieq 'All') { 'all' } else { ([string]$_.ResourceId).ToLowerInvariant() }) -notin $wantedLower }) }
+                $extra = if ($wantedKeys -contains "${allType}:all") { @() } else {
+                    @($existing.Included | Where-Object { @(Get-XsmScopeKeys @($_))[0] -notin $wantedKeys })
+                }
             } else {
                 $op = 'Conflict'
                 $detail = "Already configured in X-TAP with another scope ($before), or not allowed. Kept (Apply.ExistingCapability = Keep): to keep this scope, set it for this item (Selection.csv, Partners or Features); to change it, use Merge or Replace."
@@ -514,10 +544,11 @@ function New-XsmActions {
         # Other levels of the same feature already allowed in this policy.
         $others = @($policyCaps | Where-Object { $_.Feature -eq $cap.Feature -and $_.Name -ine $cap.Capability -and $_.IsAllowed -and -not $desiredNames.ContainsKey("$($cap.Target)|$($cap.PartnerTenantId)|$($_.Name)".ToLowerInvariant()) })
         foreach ($o in $others) {
-            if ($Settings.Apply.DisableOtherLevels) { continue }
-            $notes.Add("$($o.Name) is also allowed in this policy ($(Format-XsmLiveScope $o $groupNames)) and is kept (Apply.DisableOtherLevels = `$false).")
+            if ($Settings.Apply.DisableOtherLevels -and $op -in 'Create', 'Update', 'NoChange') { continue }
+            $keptReason = if ($Settings.Apply.DisableOtherLevels) { 'replacement is blocked or in conflict' } else { 'Apply.DisableOtherLevels = $false' }
+            $notes.Add("$($o.Name) is also allowed in this policy ($(Format-XsmLiveScope $o $groupNames)) and is kept ($keptReason).")
         }
-        $scopeText = (@($cap.Specs | ForEach-Object { if ($_.Kind -eq 'All') { 'All users' } else { $_.DisplayName, $_.Id | Where-Object { $_ } | Select-Object -First 1 } }) -join ' + ')
+        $scopeText = (@($cap.Specs | ForEach-Object { if ($_.Kind -eq 'All') { "All users (All/$(Get-XsmAllResourceType $cap.Feature))" } else { $_.DisplayName, $_.Id | Where-Object { $_ } | Select-Object -First 1 } }) -join ' + ')
         if (@($extra).Count) { $scopeText = ((@($scopeText) + @($extra | ForEach-Object { if ($_.ResourceId -ieq 'All') { 'All users' } elseif ($groupNames.ContainsKey(([string]$_.ResourceId).ToLowerInvariant())) { $groupNames[([string]$_.ResourceId).ToLowerInvariant()] } else { "$($_.ResourceType) $($_.ResourceId)" } })) -join ' + ') + ' (merged)' }
         $actions.Add((New-XsmAction @{
                     Key = "capability|$($cap.Key)"; Phase = 'Exchange'; Kind = 'Capability'; Operation = $op; InPhase = $exchangeIn; Status = (& $statusOf $op $exchangeIn)
@@ -525,7 +556,7 @@ function New-XsmActions {
                     Feature = $cap.Feature; Capability = $cap.Capability; Before = $before; After = $scopeText; Detail = $detail; Notes = @($notes); ItemIds = @($cap.ItemIds)
                     Ref = $cap; ExtraScopes = @($extra)
                 }))
-        if ($Settings.Apply.DisableOtherLevels -and $op -ne 'Blocked') {
+        if ($Settings.Apply.DisableOtherLevels -and $op -in 'Create', 'Update', 'NoChange') {
             foreach ($o in $others) {
                 $actions.Add((New-XsmAction @{
                             Key = "disable|$($cap.Target)|$($cap.PartnerTenantId)|$($o.Name)".ToLowerInvariant(); Phase = 'Exchange'; Kind = 'Capability'; Operation = 'Disable'; InPhase = $exchangeIn; Status = (& $statusOf 'Disable' $exchangeIn)
@@ -632,7 +663,7 @@ function Get-XsmPhaseExplanation {
         $what = @($caps | ForEach-Object { if ($_.Feature -eq 'AnonymousCalendarSharing') { 'anonymous calendar publishing (Anonymous:...)' } else { 'calendar sharing with every external organization (*:...)' } } | Select-Object -Unique)
         $lines = @(
             "Nothing to do in Microsoft Entra ID for this migration: the $($caps.Count) capabilit(ies) - $($what -join ', ') - go to the DEFAULT cross-tenant access policy, for All users."
-            'Phase Entra only creates the Microsoft 365 collaboration trust of a named partner tenant (organization relationship, domain entry of a sharing policy) and the security groups used as scopes: Anonymous and * entries of a sharing policy, for All users, need neither.'
+            'No named-partner trust or scope group is created by these explicitly tenant-wide entries. Wildcard Calendar Sharing still requires effective Microsoft 365 collaboration trust for each intended partner: inspect default trust and partner overrides manually. Anonymous publishing has no named partner.'
         )
         return & $result 'NotNeeded' 'not needed - only default-policy capabilities for All users (Anonymous / * sharing entries): no partner trust, no security group' $lines $(if ($nextOther) { "$nextOther - Exchange Administrator" } else { 'nothing to change in phase Exchange either: manual cutover (ManualCutover.txt)' })
     }

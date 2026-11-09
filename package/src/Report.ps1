@@ -100,15 +100,20 @@ function Get-XsmCutover {
         $commands = if ($remaining.Count) { @("Set-SharingPolicy -Identity $id -Domains $((@($remaining) | ForEach-Object { ConvertTo-XsmQuoted $_ }) -join ', ')") } else { @("Set-SharingPolicy -Identity $id -Enabled `$false") }
         $rollback = @("Set-SharingPolicy -Identity $id -Domains $original")
         if (-not $remaining.Count) { $rollback += "Set-SharingPolicy -Identity $id -Enabled `$true" }
-        $warnings = @()
+        $warnings = @('Applicable Calendar Sharing X-TAP capabilities take precedence over Sharing Policies: test with this policy enabled. Retire legacy rules only after effective trust, intended scopes and actual sharing have been verified.')
         if ($remaining.Count) { $warnings += "Entries kept (not migrated): $(@($remaining) -join ' | ')." }
-        if ($p.Default -and -not $remaining.Count) { $warnings += 'Default sharing policy: disabling it stops calendar sharing for every mailbox that uses it - the X-TAP capabilities take over.' }
+        $wildcard = @($p.Domains | Where-Object { (ConvertFrom-XsmSharingEntry $_).Kind -eq 'Wildcard' }).Count -gt 0
+        if ($wildcard) {
+            $warnings += 'Wildcard rules also cover on-premises and hybrid recipients, which X-TAP cannot replace. Commands are commented out: keep this policy enabled unless all such dependencies have been excluded.'
+            $commands = @($commands | ForEach-Object { "# $_" })
+        }
+        if ($p.Default -and -not $remaining.Count) { $warnings += 'Default sharing policy: review every explicit and inherited assignment before retiring it; choose an appropriate replacement default before removal.' }
         $steps.Add([ordered]@{
                 Source = 'Sharing policy'; Name = $p.Name
                 Partners = @($migrated | ForEach-Object { $_.PartnerName } | Select-Object -Unique)
                 Features = @($migrated | ForEach-Object { $_.Feature } | Select-Object -Unique)
                 Commands = @($commands); Rollback = @($rollback)
-                Cleanup  = @(if (-not $remaining.Count -and -not $p.Default) { "Remove-SharingPolicy -Identity $id -Confirm:`$false" })
+                Cleanup  = @(if (-not $remaining.Count -and -not $p.Default) { "$(if ($wildcard) { '# ' })Remove-SharingPolicy -Identity $id -Confirm:`$false" })
                 Warnings = $warnings
             })
     }
@@ -144,10 +149,13 @@ function Export-XsmCutoverText {
     & $line "# $($script:ToolName) $($script:ToolVersion) - MANUAL CUTOVER (not run by the tool)"
     & $line "# Tenant $($Settings.Tenant.TenantId) $($Settings.Tenant.Organization)"
     & $line '#'
-    & $line '# Organization relationships, availability address spaces and sharing policies take precedence over'
-    & $line '# Microsoft 365 X-TAP. Run these commands in Exchange Online PowerShell during a window agreed with the'
-    & $line '# administrators of the partner tenants (they disable their side at the same time), then test.'
-    & $line '# Keep the rollback commands at hand. Remove the old objects only after validation (cleanup).'
+    & $line '# Organization relationships and availability address spaces take precedence for Free/Busy and MailTips.'
+    & $line '# Applicable X-TAP Calendar Sharing capabilities take precedence over Sharing Policies: test with those'
+    & $line '# policies enabled. Anonymous publishing does not depend on EWS. Verify effective trust, scopes and actual'
+    & $line '# replacement functionality before any legacy change; coordinate each direction with the partner.'
+    & $line '# Wildcard Sharing Policy commands are commented out to protect on-premises/hybrid dependencies.'
+    & $line '# Re-enabling a Sharing Policy does not override applicable X-TAP capabilities. Keep the saved capability'
+    & $line '# baseline for manual review; these Exchange rollback commands alone do not restore changed X-TAP access.'
     & $line '# ================================================================================================'
     if (-not $Cutover.Steps.Count) { & $line ''; & $line '# Nothing to cut over: no Exchange object is migrated.' }
     foreach ($s in $Cutover.Steps) {
