@@ -250,14 +250,13 @@ function Get-XsmMigrationItems {
 
     # Sharing policies --------------------------------------------------------------------------------
     $collected = [bool]$exchange.MailboxAssignmentsCollected
-    $used = @($exchange.SharingPolicies | Where-Object { $_.Enabled -and $collected -and [int]$_.Mailboxes -gt 0 })
-    $several = $used.Count -gt 1
     $n = 0
     foreach ($p in @($exchange.SharingPolicies)) {
         $n++
         $m = 0
         $policyReasons = [Collections.Generic.List[string]]::new()
-        $unused = $collected -and [int]$p.Mailboxes -eq 0 -and -not $p.Default
+        $assignmentsKnown = $collected -and $null -ne $p.Mailboxes
+        $unused = $assignmentsKnown -and [int]$p.Mailboxes -eq 0
         foreach ($entry in @($p.Domains)) {
             $m++
             $parsed = ConvertFrom-XsmSharingEntry $entry
@@ -271,15 +270,15 @@ function Get-XsmMigrationItems {
             $notes = @()
             if ($parsed.Other.Count) { $notes += "$($parsed.Other -join ', ') is not migrated (no Microsoft 365 X-TAP equivalent)." }
             if ($parsed.Subdomains) { $notes += "The entry covers the subdomains of $($parsed.Domain); X-TAP works per tenant (every domain of the tenant)." }
-            $scopeToken = 'All'; $scopeText = 'All users'
-            if ($several) {
-                $scopeToken = "SharingPolicy:$($p.Name)"
-                $scopeText = "mailboxes of the sharing policy $($p.Name) ($([int]$p.Mailboxes))"
-                $notes += "$($used.Count) sharing policies are in use: the scope is a security group of the $([int]$p.Mailboxes) mailbox(es) of this policy (new mailboxes are not added automatically; use All or a dynamic group if preferred)."
-            } elseif (-not $collected) {
-                $notes += 'Mailboxes per sharing policy not collected: scope All assumed.'
+            $scopeToken = "SharingPolicy:$($p.Name)"
+            $scopeText = "mailboxes of the sharing policy $($p.Name)"
+            if ($assignmentsKnown) {
+                $scopeText += " ($([int]$p.Mailboxes))"
+                $notes += 'The scope is a security group of this policy''s collected mailboxes, including inherited default assignments. New mailboxes need a fresh collection and membership review; All must be chosen explicitly.'
+            } else {
+                $notes += 'Mailbox assignment data is missing: the policy scope cannot be populated automatically. Collect assignments or explicitly choose a reviewed scope; All is not assumed.'
             }
-            if ($p.Default -and $collected -and [int]$p.Mailboxes -eq 0) { $notes += 'Default sharing policy: no mailbox today, but it applies to new mailboxes.' }
+            if ($p.Default -and $unused) { $notes += 'Unused default sharing policy: excluded from automatic migration; review future mailbox assignments separately.' }
             if ($bucket) { $notes += & $cloudNote $bucket }
             $items.Add((New-XsmItem @{
                         ItemId = ('SP{0:00}-{1:00}' -f $n, $m); Source = 'SharingPolicy'; SourceName = $p.Name; Feature = $feature; Target = $target
@@ -309,11 +308,18 @@ function Get-XsmPolicyCapabilities {
     return , @($partner.Capabilities)
 }
 
+function Get-XsmScopeKeys {
+    param([AllowEmptyCollection()][object[]]$Scopes = @())
+    return @($Scopes | ForEach-Object { "$($_.ResourceType):$($_.ResourceId)".ToLowerInvariant() } | Sort-Object -Unique)
+}
+
 function Test-XsmScopeMatch {
-    <# True when a capability includes exactly the resources of a scope value (All or object IDs). #>
-    param([AllowEmptyCollection()][object[]]$Included = @(), [AllowEmptyCollection()][string[]]$Wanted = @())
-    $have = @($Included | ForEach-Object { if ($_.ResourceId -ieq 'All') { 'all' } else { ([string]$_.ResourceId).ToLowerInvariant() } } | Sort-Object -Unique)
-    $want = @($Wanted | ForEach-Object { $_.ToLowerInvariant() } | Sort-Object -Unique)
+    <# Scope identity includes both the resource type and ID; All/user and All/group are not interchangeable. #>
+    param([AllowEmptyCollection()][object[]]$Included = @(), [AllowEmptyCollection()][string[]]$Wanted = @(), [Parameter(Mandatory)][string]$Feature)
+    $have = @(Get-XsmScopeKeys $Included)
+    $want = @(Get-XsmScopeKeys @(foreach ($id in $Wanted) {
+        @{ ResourceId = $id; ResourceType = $(if ($id -ieq 'All') { Get-XsmAllResourceType $Feature } else { 'group' }) }
+    }))
     return (($have -join ',') -eq ($want -join ','))
 }
 
@@ -327,8 +333,8 @@ function Set-XsmItemXtapStatus {
     $cap = @($caps | Where-Object { $_.Name -ieq $name -and $_.IsAllowed }) | Select-Object -First 1
     if ($cap) {
         $wanted = if ($Item.DiscoveredScope -ieq 'All') { @('All') } elseif ($Item.DiscoveredScope -match $script:GuidPattern) { @($Item.DiscoveredScope) } else { $null }
-        if ($null -ne $wanted -and (Test-XsmScopeMatch $cap.Included $wanted)) { $Item.XtapStatus = 'Present'; $Item.XtapDetail = "$name already allowed with the same scope" }
-        else { $Item.XtapStatus = 'PresentOtherScope'; $Item.XtapDetail = "$name already allowed, scope: $(@($cap.Included | ForEach-Object { if ($_.ResourceId -ieq 'All') { 'All' } else { "$($_.ResourceType) $($_.ResourceId)" } }) -join ', ')" }
+        if ($null -ne $wanted -and -not @($cap.Excluded).Count -and (Test-XsmScopeMatch $cap.Included $wanted $Item.Feature)) { $Item.XtapStatus = 'Present'; $Item.XtapDetail = "$name already allowed with the same scope" }
+        else { $Item.XtapStatus = 'PresentOtherScope'; $Item.XtapDetail = "$name already allowed, scope: $(@($cap.Included | ForEach-Object { if ($_.ResourceId -ieq 'All') { "All/$($_.ResourceType)" } else { "$($_.ResourceType) $($_.ResourceId)" } }) -join ', ')" }
         return
     }
     $other = @($caps | Where-Object { $_.Feature -eq $Item.Feature -and $_.IsAllowed })

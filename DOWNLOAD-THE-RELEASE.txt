@@ -1,0 +1,11 @@
+Looking for the ready-to-run tool?
+
+This archive is the source code, not the release package.
+
+1. Open https://github.com/Nico77600/XTapSharingMigration/releases/latest
+2. Expand Assets.
+3. Download XTapSharingMigration-<version>.zip, not either "Source code" archive.
+4. Extract it and open docs\XTapSharingMigration-UserGuide.html.
+
+Source checkout only: runtime files are under package\, with tests and build
+tools outside it. See README.md if you are developing the project.

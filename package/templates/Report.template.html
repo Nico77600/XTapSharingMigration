@@ -268,7 +268,7 @@ if (arr(DATA.Conflicts).length) addCallout("warn", "Choices to make", arr(DATA.C
 if (DATA.Warnings && arr(DATA.Warnings).filter(w => !String(w).startsWith("Choice needed")).length) addCallout("warn", "Warnings", arr(DATA.Warnings).filter(w => !String(w).startsWith("Choice needed")));
 if (kind === "Collect") addCallout("ok", "Read-only inventory", ["This report is the picture of the configuration found. The tool changed nothing in Exchange Online or Microsoft Entra.", "Next: review the items, adjust the configuration file or Selection.csv if needed, then run the plan (see the Next steps tab)."]);
 if (runFeatures.length && kind !== "Collect") addCallout("info", "Part of the features only", [`This run migrates ${runFeatures.map(featureText).join(", ")} only (-Feature). The other items are listed but not configured; an organization relationship whose other features are not migrated must not be cut over yet (see the warnings of the Manual cutover tab).`]);
-if (kind === "Apply") addCallout("warn", "Cutover not done", ["Organization relationships, availability address spaces and sharing policies still take precedence over Microsoft 365 X-TAP. The cutover is manual and coordinated with each partner: see the Manual cutover tab, and the guide, chapter 11 (after the script) for the partner contact, the change window, the tests and the browser developer tools checks."]);
+if (kind === "Apply") addCallout("warn", "Runtime verification still required", ["Readback verifies stored configuration, not propagation or working sharing. Organization relationships and availability address spaces take precedence for Free/Busy and MailTips. Applicable X-TAP Calendar Sharing capabilities take precedence over Sharing Policies: test with those policies enabled. See the Manual cutover tab and the guide, chapter 11; preserve wildcard rules for on-premises/hybrid dependencies."]);
 
 /* ---------- Panels ---------- */
 const tabs = $("#tabs"), panels = $("#panels");
@@ -463,7 +463,7 @@ if (DATA.Xtap) {
 if (DATA.Cutover) {
   addPanel("cutover", "Manual cutover", arr(DATA.Cutover.Steps).length, p => {
     const cut = DATA.Cutover;
-    p.append(el("div", { class: "callout warn" }, el("strong", { text: "Not run by the tool" }), el("p", { text: "Organization relationships, availability address spaces and sharing policies take precedence over Microsoft 365 X-TAP. When both tenants are ready, disable the old objects in the same window as the partner, test, and keep the rollback commands at hand. Remove the old objects only after validation. The same commands are in ManualCutover.txt." })));
+    p.append(el("div", { class: "callout warn" }, el("strong", { text: "Not run by the tool" }), el("p", { text: "Coordinate legacy Free/Busy and MailTips cutover with the partner. Calendar Sharing X-TAP takes precedence when applicable: verify actual replacement functionality before retiring Sharing Policy entries. Wildcard commands are commented out to protect on-premises/hybrid dependencies. Exchange rollback alone does not undo changed X-TAP capabilities. The same commands are in ManualCutover.txt." })));
     if (!arr(cut.Steps).length) p.append(el("div", { class: "card" }, el("p", { class: "muted", text: "No Exchange Online object is migrated: nothing to cut over." })));
     for (const s of arr(cut.Steps)) {
       p.append(el("div", { class: "cut" },
@@ -492,7 +492,7 @@ if (kind === "Collect") {
       ["Phase Entra", "Security groups and the Microsoft 365 collaboration trust of each partner.", [".\\Invoke-XTapSharingMigration.ps1 -Mode Apply -Phase Entra"], "Security Administrator + Groups Administrator (or Global Administrator)"],
       ["Phase Exchange", "Free/Busy, MailTips and calendar sharing capabilities.", [".\\Invoke-XTapSharingMigration.ps1 -Mode Apply -Phase Exchange"], "Exchange Administrator (or Global Administrator)"],
       ["Contact each partner and plan the window", "Send your tenant ID and what you configured, get theirs; agree on the date, the test accounts on both sides, the GO / STOP criteria and who rolls back (guide, chapter 11).", null, "Change owner + partner administrators"],
-      ["Cutover, both sides in the same window", "Not done by the tool: run the commands of ManualCutover.txt (disable the organization relationships and the migrated sharing policy entries), the partner does the same.", null, "Exchange Administrator"],
+      ["Verify Calendar Sharing, coordinate legacy cutover", "Not done by the tool: test Calendar Sharing while Sharing Policies remain enabled. Review ManualCutover.txt per feature; retire legacy rules only after replacement functionality and on-premises/hybrid dependencies have been reviewed.", null, "Exchange Administrator"],
       ["Test, then GO or rollback", "Free/Busy in the Scheduling Assistant, MailTips, calendar sharing, published calendars - and the GetSchedule call in the browser developer tools (guide, chapter 11). Rollback commands are in the same file.", null, "Both sides"],
       ["Clean up after stabilization", "Remove the old objects (cleanup commands), then run Collect again: the new inventory is the closing picture.", null, "Exchange Administrator"]
     ];

@@ -1,299 +1,344 @@
 ---
 title: X-TAP Sharing Migration
-subtitle: User guide
-version: 1.0.3
+subtitle: User guide — start here
+version: 1.0.4
 author: Nicolas Fabert
-updated: 2026-10-08
+updated: 2026-11-09
 ---
 
 # X-TAP Sharing Migration — User guide
 
-> What you need before the first run — the feature rolled out in **both tenants**, and the roles of **both administrators** — then one command per step, from the first inventory to the cutover: **what do we share today?**, **which partner is behind which domain?**, **what would X-TAP look like?**, **create the groups and the trusts**, **write the capabilities**, **disable the old objects with the partner**. The principles, every rule of the configuration, `Selection.csv`, the report tabs, the browser captures and the internals are in the [developer guide](XTapSharingMigration-Guide.md).
+> You do not need to know Graph commands. Follow one step at a time: **where to work, which account to use, what to do, what you should see, and when to stop**. Your first goal is a read-only inventory. Changing the tenant comes later, only after reviewing the plan.
 
-> [!IMPORTANT]
-> Files downloaded from the Internet may be blocked by Windows and fail to run. Before using this project, unblock every file in the downloaded folder:
->
-> ```powershell
-> Get-ChildItem "C:\Chemin\Du\Dossier" -Recurse -File -Force | Unblock-File
-> ```
->
-> Replace the example path with the folder where you downloaded or extracted this project.
->
-> The `Install-Module` commands in this documentation use `-Force`, so they also update or reinstall a module that is already installed. If an older version still conflicts, close every PowerShell window, open a new one (as administrator for `-Scope AllUsers`), run `Uninstall-Module <ModuleName> -AllVersions -Force`, then run the `Install-Module` command again.
+[Download the latest release](https://github.com/Nico77600/XTapSharingMigration/releases/latest) · [What's new](https://github.com/Nico77600/XTapSharingMigration/blob/main/CHANGELOG.md) · [Technical guide](XTapSharingMigration-Guide.md)
 
-```cards
-checklist | Prerequisites | Chapter 1: the modules, the roles, the two tenants and the two administrators.
-download | One-time setup | Chapter 2: copy the tool, fill in the tenant, run the first inventory.
-terminal | Everyday use | Chapter 3: inventory, partners, plan, the two phases, the cutover.
-chart | Results | Chapter 4: the reports, the files of a run, the exit codes.
-```
+This guide describes version 1.0.4. Use the HTML guide included with the ZIP you downloaded when running another version.
 
-# Part I · Start here
+| Your path | What happens |
+|---|---|
+| **Start safely** | Collect and Plan read tenant settings. They do not change sharing. |
+| **Review, then change** | Apply Entra creates groups/trusts. Apply Exchange writes sharing settings. |
+| **Test with the partner** | Stored settings are not proof that a real calendar share works. |
 
 <!-- icon: checklist -->
-## 1. Prerequisites
+## 1. Before you start
 
-### 1.1 Your workstation
+### A few words in plain English
 
-| Item | Requirement |
+| Word in the tool | What it means |
 |---|---|
-| PowerShell | **7.4** or later |
-| Modules | `Microsoft.Graph.Authentication` 2.25 or later, `ExchangeOnlineManagement` 3.9 or later (not 3.10.0 in certificate mode). `ExchangeOnlineManagement` is used by **Collect** only: an administrator who runs only Plan or Apply — the Entra administrator, typically — needs just `Microsoft.Graph.Authentication`. |
-| Console | Windows Terminal (colours and icons); any PowerShell console works |
-| Network | `graph.microsoft.com`, `login.microsoftonline.com`, `outlook.office365.com` |
+| **Tenant** | Your Microsoft 365 organization. The partner has a different tenant. |
+| **X-TAP** | Microsoft's new settings for sharing between organizations. |
+| **Capability** | One permission setting: what the partner may see, and for which of your users. |
+| **Trust** | Permission for collaboration with a partner organization. It is not a calendar invitation. |
+| **Scope** | The users covered by a setting. A group limits it; `All` covers your whole tenant. |
+| **Sharing Policy** | The existing Exchange policy assigned to mailboxes for calendar sharing/publishing. |
+| **Collect / snapshot** | The saved picture of the settings before migration. Plan and Apply read this picture. |
+| **Cutover** | A separately reviewed change to legacy Exchange settings. The tool does not run it. |
+
+**Direction matters:** your tenant's settings control what the partner can see of **your** users. For your users to see the partner's users, the partner must configure its own tenant. Run and review this tool separately for each tenant you administer.
+
+### Workstation and accounts
+
+Use **Windows with PowerShell 7.4 or later**. Open **PowerShell 7** from the Start menu; **Windows PowerShell** is the older 5.1 console. Windows Terminal can host either: check the version instead of relying on the window's appearance.
+
+| Step | Account to use |
+|---|---|
+| Collect | An account that can read Exchange sharing settings and the Graph inventory |
+| Plan | An administrator with Graph read access in this tenant; no Exchange connection is needed |
+| Apply Entra | Security Administrator plus Groups Administrator for new groups, or Global Administrator |
+| Apply Exchange | Exchange Administrator or Global Administrator |
+
+You can use separate administrators for the two Apply phases. Keep the **same configuration and Collect folder**; the [handover instructions](XTapSharingMigration-Guide.md#two-administrators) explain what to copy. You do not need local Windows administrator rights to install modules with `-Scope CurrentUser`.
+
+The tool requests these delegated Graph permissions. An administrator may need to approve them under your organization's policy; **stop if the app, tenant or permissions do not match what you expect**.
+
+| Run | Graph permissions |
+|---|---|
+| Collect | `Policy.Read.All`, `CrossTenantInformation.ReadBasic.All`, `Group.Read.All` |
+| Plan | `Policy.Read.All`, `Group.Read.All` |
+| Apply Entra | `Policy.Read.All`, `Policy.ReadWrite.CrossTenantAccess`, plus `Group.ReadWrite.All` for group creation (otherwise `Group.Read.All`) |
+| Apply Exchange | `Policy.Read.All`, `Policy.ReadWrite.CrossTenantCapability`, `Group.Read.All` |
+
+Do not grant extra permissions to get past an unexplained error. The default application is **Microsoft Graph Command Line Tools**; your organization can configure its own approved app in the technical guide.
+
+### Agree on a small first test
+
+Pick one partner and a few test mailboxes. Confirm the feature is available in **both tenants** using the current Microsoft guidance and Message Center **MC1446796**. Rollout dates alone do not prove availability or propagation for your pair of tenants.
+
+Record what users can see **before** changing anything: availability, subject/location, full calendar details, and MailTips with automatic replies enabled. Do not use real confidential calendar content for a publishing test. Exchange hybrid and partners hosted on Exchange Server are outside this migration.
+
+<!-- icon: download -->
+## 2. Download and prepare the tool
+
+### 2.1 Download the package, not the source
+
+**Where:** your browser, then File Explorer.
+
+1. Open [the latest release](https://github.com/Nico77600/XTapSharingMigration/releases/latest).
+2. Expand **Assets** and download `XTapSharingMigration-<version>.zip`.
+3. Do **not** choose **Source code (zip)**, **Source code (tar.gz)** or the green **Code** button.
+4. Right-click the downloaded ZIP, choose **Extract All**, and choose a working folder.
+5. Find the folder that directly contains `Invoke-XTapSharingMigration.ps1`. Keep all the extracted files together.
+
+**Expected:** that folder also contains `config`, `src`, `templates` and `docs`. Double-click `docs\XTapSharingMigration-UserGuide.html` for this guide offline.
+
+This guide uses `C:\Tools\XTapSharingMigration` as an example. **Replace it with your actual extracted folder.** The ZIP might create an extra version-named folder; use the one containing the script. Only developers using the source checkout work inside `package`.
+
+### 2.2 Open PowerShell 7 in that folder
+
+**Where:** PowerShell 7 on your workstation.
 
 ```powershell
-Install-Module Microsoft.Graph.Authentication -Scope CurrentUser -Force
+Set-Location 'C:\Tools\XTapSharingMigration'
+$PSVersionTable.PSVersion
+Get-Item .\Invoke-XTapSharingMigration.ps1
+Get-ChildItem . -Recurse -File -Force | Unblock-File
+```
+
+**Expected:** version **7.4 or later**, then the script's filename. `Unblock-File` normally prints nothing; it removes Windows' downloaded-file marker from these files.
+
+**If not:** a missing script means the wrong directory, not a missing module. Correct the path first. If your organization blocks script execution by policy, ask the administrator; do not disable its policy or use an execution-policy bypass.
+
+### 2.3 Install the modules once
+
+**Where:** the same PowerShell 7 window.
+
+```powershell
+Install-Module Microsoft.Graph.Authentication -MinimumVersion 2.25.0 -Scope CurrentUser -Force
 Install-Module ExchangeOnlineManagement -MinimumVersion 3.10.1 -Scope CurrentUser -Force
 ```
 
-### 1.2 Your roles
+If PowerShell asks to install the NuGet provider or trust PSGallery, confirm only if this is your approved installation source. These commands install or update modules for your Windows account. They do not change tenant sharing.
 
-| Run | Microsoft Entra / Exchange role | Delegated Microsoft Graph permissions |
-|---|---|---|
-| `Collect` | Exchange: a role that can run the `Get-` cmdlets (View-Only Organization Management, Global Reader, Exchange Administrator) | `Policy.Read.All`, `CrossTenantInformation.ReadBasic.All`, `Group.Read.All` |
-| `Plan` | any of the roles below, read-only use | `Policy.Read.All`, `Group.Read.All` |
-| `Apply -Phase Entra` | **Security Administrator** or Global Administrator, and **Groups Administrator** when groups are created | `Policy.ReadWrite.CrossTenantAccess`, `Group.ReadWrite.All` (or `Group.Read.All` when no group is created) |
-| `Apply -Phase Exchange` | **Exchange Administrator** or Global Administrator | `Policy.ReadWrite.CrossTenantCapability`, `Group.Read.All` |
+**Expected:** both commands finish without a red error. The Entra-only administrator needs `Microsoft.Graph.Authentication`, not the Exchange module.
 
-The first sign-in asks for consent to these permissions for the **Microsoft Graph Command Line Tools** application (or your own application, `Authentication.GraphClientId`).
+**If not:** close PowerShell after updating a module, reopen **PowerShell 7**, return to the same folder and try again. A proxy or installation restriction needs your administrator; do not uninstall all module versions as a first step.
 
-### 1.3 Both tenants
+### 2.4 Tell the tool which tenant to use
 
-Microsoft rolls out the X-TAP capabilities feature by feature and cloud by cloud, and asks to migrate only **after** the rollout has completed in the environment of **both** tenants. Schedule published by the Exchange team (worldwide environment, blog post updated 29 September 2026):
-
-| Feature | Rollout begins | Expected completion |
-|---|---|---|
-| Free/Busy | August 2026 | 23 September 2026 |
-| MailTips | August 2026 | 29 September 2026 |
-| Calendar sharing | August 2026 | 15 October 2026 |
-
-GCC, GCC High and DoD: rollout paused at the time of writing. Check the current status in Message Center (**MC1446796**). A feature that is not yet available: leave it out with `-Feature` (3.3) and migrate it later.
-
-> [!NOTE]
-> Not ready in time? Microsoft's safety valve is `EWSEnabled = $true` on the organization, which keeps the old cross-tenant path working until the final EWS shutdown (**1 April 2027**). For two-way sharing, **both** organizations need it.
-
-### 1.4 Both administrators
-
-The two phases can be run by different people, on different days, from the **same Collect** — or together with `-Phase All` by a Global Administrator.
-
-| Item | What it means for you |
-|---|---|
-| Entra administrator | Security Administrator (+ Groups Administrator). No Exchange role and no `ExchangeOnlineManagement` module: Plan and Apply read the snapshot and Microsoft Graph, never Exchange Online. |
-| Exchange administrator | Runs Collect and Plan, then `Apply -Phase Exchange`. |
-| Same reference | Give `-SnapshotPath` to both. Without it, each run takes the **most recent** Collect of the tenant in its own `output` folder. |
-| Same choices | Same configuration, same `-SelectionPath`, same `-Feature`. |
-| Accounts | `Authentication.ExchangeAdmin` and `Authentication.EntraAdmin` in the configuration, or `-UserPrincipalName` for one run. The tool stops if another account — or another tenant — signs in. |
-| Order | Entra, then Exchange. Run first, the Exchange phase applies only what needs nothing new; the others are **Blocked** and the exit code is `2`. Run it again after the Entra phase. |
-
-What to hand over and what each one runs: [developer guide, chapter 8 — Two administrators](XTapSharingMigration-Guide.md#two-administrators).
-
-<!-- icon: download -->
-## 2. One-time setup
-
-```steps
-Copy the tool | Unblock the files (box above), then clone the repository — or download the zip of a [release](https://github.com/Nico77600/XTapSharingMigration/releases): it contains the same run-time files, with the HTML guides.
-Fill in the tenant | `notepad .\config\XTapSharingMigration.config.psd1`: `Tenant.TenantId` and `Tenant.Organization` (`xxx.onmicrosoft.com`). After every sign-in, the tool stops if it is connected to another tenant.
-Name the administrators | Optional: `Authentication.ExchangeAdmin` and `Authentication.EntraAdmin`, when the two phases belong to two people (1.4).
-First inventory | `.\Invoke-XTapSharingMigration.ps1` — read-only, nothing is changed.
-```
+**Where:** open the existing configuration in Notepad:
 
 ```powershell
-git clone https://github.com/Nico77600/XTapSharingMigration.git
-cd XTapSharingMigration\package
-notepad .\config\XTapSharingMigration.config.psd1    # Tenant.TenantId, Tenant.Organization
-.\Invoke-XTapSharingMigration.ps1                     # first inventory
+notepad .\config\XTapSharingMigration.config.psd1
 ```
 
-Everything else has a usable default: the features are all migrated with the level and the scope found in Exchange Online, nothing is replaced, nothing is deleted. The rules to change that — `Features`, `Partners`, `Groups`, `Entra`, `Apply` — are in the [developer guide, chapter 7](XTapSharingMigration-Guide.md#7-configuration).
+In the **Microsoft Entra admin center**, select your intended tenant and open **Entra ID → Overview**. Copy its **Tenant ID**. Find your organization's initial **`xxx.onmicrosoft.com` domain** under its domain names; this is not your administrator's email address.
 
-> [!IMPORTANT]
-> The tool **never changes an Exchange Online object** and **never deletes** anything. Organization relationships, sharing policies and availability address spaces keep working — and keep taking precedence over X-TAP — until you run the cutover commands yourself, in a window agreed with each partner.
+Find the existing `Tenant` section in Notepad and fill in the two quoted values. **Example of file content — do not run this in the console, and do not replace the entire file:**
 
-# Part II · Everyday use
-
-<!-- icon: terminal -->
-## 3. From inventory to cutover
-
-```flow
-search | Collect | read-only inventory
-arrow | review | config or CSV
-target | Plan | target vs tenant
-arrow | phase 1 | Entra admin
-key | Apply · Entra | groups, trusts
-arrow | phase 2 | Exchange admin
-mail | Apply · Exchange | capabilities
-arrow | manual | with each partner
-undo | Cutover | old objects off
+```psd1
+Tenant = @{
+    TenantId     = 'aaaaaaaa-0000-4000-8000-000000000001'
+    Organization = 'contoso.onmicrosoft.com'
+}
 ```
 
-Run the commands from the `package` folder, in PowerShell 7. Every run writes into `output\<tenant>\<date>_<mode>`; Plan and Apply use the most recent Collect of the tenant unless `-SnapshotPath` is given.
+Replace **both** example values with yours. Save the file. Keep the other sections and leave the default **Keep** protection unchanged. Never put a password or access token in this file.
 
-### 3.1 Inventory
+**Expected:** your own tenant ID and domain, with quotes and braces intact. At sign-in, the tool checks the connected tenant and stops on a mismatch.
 
-**Do:** run the tool with no parameter, as the Exchange administrator. Two sign-ins: Microsoft Graph, then Exchange Online.
+<!-- icon: search -->
+## 3. Run the inventory — no changes
+
+**Where:** PowerShell 7, in the tool folder.
+
+**Who:** the account with Exchange and Graph read access.
+
+**Effect:** reads tenant settings and writes local reports; it does not change tenant sharing.
 
 ```powershell
 .\Invoke-XTapSharingMigration.ps1
 ```
 
-**You should see:** the steps in the console, then the run folder with `Inventory.html`, `snapshot.json`, `Selection.csv`, `PartnersToConfirm.txt`, `SharingPolicyMailboxes.csv` and `backup\*.xml`. Open `Inventory.html`: this is the **initial picture** of the tenant — keep it with the change record.
+Sign in to **Microsoft Graph first**, then **Exchange Online**, as prompted. Check the tenant/account in each prompt and complete MFA. Do not manually connect in a different order before the run.
 
-![The inventory in the console](images/console-collect.png)
+**Expected:** console steps, then a new folder under `output\<your-tenant>\<date>_Collect`. The console gives its exact path. Collection of large mailbox populations can take time; no fixed completion time is guaranteed. Wait for the final summary instead of starting duplicate runs.
 
-Each item is one feature of one Exchange object for one partner tenant, in scope or out of scope **with its reason**. Exchange **hybrid** objects and partners on **Exchange Server** are listed and never configured.
+Open **`Inventory.html`** in that folder. Review the partner list, items in/out of scope and warnings. An item means one feature of an Exchange sharing object, not necessarily one mailbox.
 
-### 3.2 Confirm the partner tenant IDs
+![Example inventory in the console](images/console-collect.png)
 
-**Do:** send each partner the line that concerns it in `PartnersToConfirm.txt` — the tenant ID found and your own — and paste the answer in the configuration:
+**Keep this Collect folder intact.** It contains the snapshot, mailbox assignments and Exchange backups used by later steps. Reports contain tenant data; do not upload the folder to a public issue.
+
+For the remaining commands, save the **actual path printed by your run** in `$run`:
 
 ```powershell
+$run = Read-Host 'Paste the full Collect folder path printed by the tool, without surrounding quotes'
+Get-Item (Join-Path $run 'snapshot.json')
+```
+
+**Expected:** `snapshot.json` is found. If not, stop and correct the path. `$run` is a variable in this window only; repeat these two commands after opening a new PowerShell window.
+
+**You can stop here** if you only wanted an assessment. No Apply is needed to read the report.
+
+<!-- icon: target -->
+## 4. Confirm the partner and review the plan
+
+### 4.1 Confirm who the partner is
+
+Open **`PartnersToConfirm.txt`** inside your Collect folder. It lists partner tenant IDs found from their domains. Have the partner's administrator confirm the relevant ID through an agreed channel. A matching email domain alone is not confirmation from the owner.
+
+Reopen your configuration:
+
+```powershell
+notepad .\config\XTapSharingMigration.config.psd1
+```
+
+In the existing `Partners = @( ... )` section, add the confirmed partner entry. Replace the sample name, domain and ID. **File content, not a command:**
+
+```psd1
 Partners = @(
-    @{ Name = 'Fabrikam'; Match = 'fabrikam.com'; TenantId = 'bbbbbbbb-0000-4000-8000-000000000002' }
+    @{
+        Name     = 'Fabrikam'
+        Match    = 'fabrikam.com'
+        TenantId = 'bbbbbbbb-0000-4000-8000-000000000002'
+    }
 )
 ```
 
-**You should see:** a partner whose tenant ID is not confirmed stays **Blocked** in the plan, and no trust is created for it. A domain that belongs to another tenant than the one given by the partner is a **Mismatch**: check with the partner before going further.
+Keep any other partner entries you already have; do not create a second `Partners` section. Save. An existing partner policy or a collected address space can also confirm an ID; the report explains the source.
 
-![Partners and tenant ID confirmation in the inventory](images/report-partners.png)
+**Expected:** the partner is confirmed in Plan. **Stop** on **Mismatch** or an unconfirmed partner. Do not turn off `RequireConfirmedPartners` to hide the problem.
 
-The exchange of tenant IDs is also the moment to agree on the **cutover window**: X-TAP is inbound, so each partner configures access for **your** tenant ID on its side, and both of you disable the old objects at the same time.
+### 4.2 Run Plan using the saved Collect
 
-### 3.3 Decide what to migrate
+**Where:** PowerShell 7 in the tool folder, with `$run` set as above.
 
-Accept the proposal, or adjust the `Features`, `Partners` and `Groups` rules of the configuration, or complete `Selection.csv` of the run — one row per item, with `Include`, `Level` and `Scope`:
-
-```powershell
-.\Invoke-XTapSharingMigration.ps1 -Mode Plan -SelectionPath .\output\contoso.onmicrosoft.com\2026-10-01_101500_Collect\Selection.csv
-```
-
-A run of Plan or Apply can also be limited to some features — `FreeBusy`, `MailTips`, `CalendarSharing`, `AnonymousCalendarSharing` — while the others are not yet rolled out (1.3):
+**Effect:** reads Graph, compares settings and writes local reports. No tenant changes.
 
 ```powershell
-.\Invoke-XTapSharingMigration.ps1 -Mode Plan  -Feature FreeBusy, MailTips
-.\Invoke-XTapSharingMigration.ps1 -Mode Apply -Phase Entra    -Feature FreeBusy, MailTips
-.\Invoke-XTapSharingMigration.ps1 -Mode Apply -Phase Exchange -Feature FreeBusy, MailTips
+.\Invoke-XTapSharingMigration.ps1 -Mode Plan -SnapshotPath $run
 ```
 
-Use the **same** `-Feature` for Plan and both Apply phases. Every column of `Selection.csv` and every rule: [developer guide, chapters 7 and 9](XTapSharingMigration-Guide.md#9-choosing-item-by-item--selectioncsv).
+Open **`Plan.html`** in the **new Plan folder** printed by this command, not the earlier inventory report. Review the proposed actions, partner, mailbox groups, detail levels and warnings.
 
-### 3.4 Plan
+| Result | What to do |
+|---|---|
+| **Create / Update / AddMembers** | A proposed change. Check exactly who receives what access. |
+| **NoChange** | The stored setting already matches the plan. This is not a real sharing test. |
+| **Conflict** | An existing setting differs and is kept. Review it; do not immediately select Replace. |
+| **Blocked** | Read the Detail column and resolve the stated dependency or choice. |
 
-**Do:** compare the target with the tenant. Nothing is changed.
+Before Entra has run, Exchange actions that say **run -Phase Entra first** may be expected. Other unknown blockers or conflicts must be understood before continuing. If several detail levels are found, the tool asks which one to keep; do not guess the most detailed level.
 
-```powershell
-.\Invoke-XTapSharingMigration.ps1 -Mode Plan
-```
+### 4.3 Check the users and details
 
-**You should see:** one table per phase in the console, and `Plan.html` with the actions, the target configuration, the decision of each item and the manual cutover commands. Check every **Blocked** and every **Conflict**, and run Plan again after each change of the configuration.
+By default, **each Sharing Policy uses a security group of its collected mailboxes**, including inherited default-policy assignments. Missing assignment data or group members outside that policy block automatic use pending review. The tool never removes group members automatically.
 
-![The plan in the console: one table per phase](images/console-plan.png)
+If you deliberately want **every local user**, including future mailboxes and users of other Sharing Policies, edit the existing `CalendarSharing` or `AnonymousCalendarSharing` feature entry and change only its `Scope` to `'All'`. Review that exposure with the owner. This is optional, **not** a workaround for missing mailbox data. The [technical scope reference](XTapSharingMigration-Guide.md#3-what-is-migrated--and-what-is-not) explains `All/group`, managed groups and `Keep/Merge/Replace`.
 
-### 3.5 Apply — phase Entra
+To exclude features or select individual items, follow the [selection instructions](XTapSharingMigration-Guide.md#9-choosing-item-by-item--selectioncsv). **Editing `Selection.csv` alone does nothing:** the same `-SelectionPath` must be passed to Plan and both Apply phases. Likewise, keep any `-Feature` restriction identical in all three commands.
 
-**Do:** create the security groups and the Microsoft 365 collaboration trust of each partner, as the Entra administrator.
+Run Plan again after changing the configuration or selection. **The following Apply examples assume no custom `-SelectionPath` or `-Feature`.** If you used either, carry it forward exactly.
 
-```powershell
-.\Invoke-XTapSharingMigration.ps1 -Mode Apply -Phase Entra
-```
-
-Type `YES` (any case) to confirm: any other answer cancels the run and changes nothing.
-
-**You should see:** `Result.html` with what was created, verified by reading the tenant again. **Phase Entra - nothing to change** is normal when only Anonymous and `*` sharing entries are migrated for All users, or when the trusts and groups already exist: the summary gives the reason (*Why*) and the next command.
-
-### 3.6 Apply — phase Exchange
-
-**Do:** write the Free/Busy, MailTips and calendar sharing capabilities, as the Exchange administrator.
-
-```powershell
-.\Invoke-XTapSharingMigration.ps1 -Mode Apply -Phase Exchange
-```
-
-**You should see:** the capabilities created or already in place. A capability that needs a group or a trust not yet created is **Blocked** — *run -Phase Entra first* — with the exit code `2`: run the Entra phase, then this one again. What is already in place shows **No change**, so any phase can be run again at any time.
-
-`-Phase All` runs both phases in one execution, for a Global Administrator.
-
-### 3.7 Cut over with each partner
-
-When Apply is finished, X-TAP is **configured but not used**: the old objects take precedence over it. The cutover is manual, in a window agreed with the partner, and both sides run their commands in the same window.
-
-```steps
-Pre-checks | `-Mode Plan` shows **No change** for every action; the scope groups have their members; the partner confirms its side; the baseline tests are done and kept.
-Cutover | Run the commands of `ManualCutover.txt` (the **Manual cutover** tab of the report gives the same), and note the time of each one.
-Tests | The test matrix of the [developer guide, chapter 11](XTapSharingMigration-Guide.md#11-after-the-script--partner-window-cutover-tests): Free/Busy in and out of the scope, MailTips with an automatic reply, calendar sharing, a partner not migrated.
-GO or rollback | Every test gives the baseline result: **GO**. Otherwise run the **rollback** commands of the same file: the old path takes precedence again, and X-TAP stays configured for the next attempt.
-```
-
-| Object | Cutover | Rollback |
-|---|---|---|
-| Organization relationship | `Set-OrganizationRelationship -Enabled $false` | `-Enabled $true` |
-| Sharing policy | `Set-SharingPolicy -Domains <entries not migrated>`, or `-Enabled $false` when nothing remains | `Set-SharingPolicy -Domains <original entries>` (+ `-Enabled $true`) |
-| Availability address space | `Export-Clixml`, then `Remove-AvailabilityAddressSpace` — only once the partner has configured its side | `Add-AvailabilityAddressSpace` from the export |
-
-![Manual cutover commands, with the rollback](images/report-cutover.png)
+<!-- icon: key -->
+## 5. Apply the reviewed settings
 
 > [!WARNING]
-> Test MailTips with a user whose automatic reply is **on**: MailTips out of scope are silent — no error, no tip — and look exactly like "no automatic reply". Always compare with the baseline taken before the cutover.
+> The next commands **change the tenant**. Use only the plan, users and features you have reviewed. Keep the original Collect folder and agree on a rollback plan. Do not run `ManualCutover.txt` at this stage.
 
-### 3.8 Clean up
+### 5.1 Apply Entra — groups and trusts
 
-**Do not remove the old objects in the cutover window.** Remove them only after a stable period agreed with the partner. Then run the **cleanup** commands of `ManualCutover.txt` — `Remove-OrganizationRelationship`, and `Remove-SharingPolicy` for a policy left with no entry (never the default policy) — and run `Collect` again: the new inventory is the closing picture of the change.
+**Who:** Security Administrator plus Groups Administrator for new groups, or Global Administrator.
 
-<!-- icon: chart -->
-## 4. Results
+**Where:** PowerShell 7 in the same tool folder, using the same Collect.
 
-Each run writes one self-contained HTML file — no external resource, so it can be sent by mail or opened from OneDrive. Light and dark themes, search and filters on every table, details on click.
+```powershell
+.\Invoke-XTapSharingMigration.ps1 -Mode Apply -Phase Entra -SnapshotPath $run
+```
 
-| Report | Written by | Tabs |
-|---|---|---|
-| **Inventory.html** | Collect | Migration items · Partners · Exchange Online · X-TAP today · Next steps |
-| **Plan.html** | Plan | Actions · Target configuration · Items · Exchange Online · X-TAP today · Manual cutover · Settings used |
-| **Result.html** | Apply | The same tabs; each action shows **Done / Failed / Skipped** and **Verified** |
+Check the proposed actions and tenant. Type **`YES` only if you intend to make them**. Any other answer cancels before execution.
 
-| Operation | Meaning |
+**Expected:** required groups/trusts are created or reported already in place. Open `Result.html` in this run's new folder. Read **Failed**, **Skipped** and **Not verified** before continuing.
+
+**Nothing to change** can be normal: groups/trusts already exist, or you explicitly selected only tenant-wide default-policy entries. Wildcard sharing still needs effective collaboration trust with each intended partner; the tool never broadly enables default trust.
+
+### 5.2 Apply Exchange — sharing capabilities
+
+**Who:** Exchange Administrator or Global Administrator.
+
+**Where:** the same folder and Collect. A second administrator must receive the full handover, not just `snapshot.json`.
+
+```powershell
+.\Invoke-XTapSharingMigration.ps1 -Mode Apply -Phase Exchange -SnapshotPath $run
+```
+
+Review again, then type **`YES` only for the approved changes**.
+
+**Expected:** capabilities are configured or already in place. Open this run's `Result.html`. **Verified** means the stored setting was read back successfully; it does **not** mean propagation is complete or that a user has shared a calendar successfully.
+
+If it says **run -Phase Entra first**, complete that phase and review Plan again. A partially failed Apply is not an automatic rollback: inspect what succeeded before rerunning anything.
+
+The normal path uses two phases so each administrator sees their own changes. `-Phase All`, certificate authentication and unattended runs are advanced options in the technical guide, not prerequisites for a first run.
+
+<!-- icon: check -->
+## 6. Test with the partner before retiring anything
+
+**First run Plan again** with the same Collect, configuration, selection and feature choices. Investigate remaining conflicts or mismatches. Then test real behavior in **both directions** that your migration is intended to support.
+
+| Test | What success looks like |
 |---|---|
-| **Create** / **Update** / **Add members** | The change to make (Plan) or made (Apply) |
-| **No change** | Already in place |
-| **Conflict** | An existing setting differs and is kept |
-| **Blocked** | Cannot be done: partner not confirmed, group missing, other phase not done — the detail says what to do |
-| **Other phase** | Belongs to the phase not run now |
+| Availability | A partner sees the agreed availability/details for an in-scope test mailbox. An out-of-scope mailbox does not expose them. |
+| MailTips | The partner sees the expected automatic reply for a test user whose reply is **on**. Silence alone proves nothing. |
+| Calendar sharing | The agreed detail level is offered, the approved invitation succeeds, the recipient accepts and can open the calendar with the expected details. |
+| Anonymous publishing, if in scope | An approved synthetic calendar is published at the intended level and checked without sign-in. Do not expose a real private calendar for a test. |
+| Unchanged scenarios | Existing sharing, a non-migrated partner and any on-premises/hybrid dependencies still work as intended. |
 
-| File of the run | Content |
-|---|---|
-| `Selection.csv` | One row per item, to choose item by item (3.3) |
-| `PartnersToConfirm.txt` | One line per partner, ready to send (3.2) |
-| `ManualCutover.txt` | The cutover, rollback and cleanup commands (3.7, 3.8) |
-| `snapshot.json` | Everything Collect read and the classification — input of Plan and Apply |
-| `backup\*.xml` | Raw Exchange objects (`Export-Clixml`) |
-| `logs\XTapSharingMigration_<date>.log` | Every line of the console, without colours, plus the Graph calls |
+**An invitation or publication exposes content to others.** Obtain the appropriate approval before that step. Merely opening a dialog is not the whole test.
 
-| Exit code | Meaning |
-|---|---|
-| `0` | Success |
-| `1` | Failure (error, or an action failed) |
-| `2` | Finished with points to look at: blocked items, skipped or unverified actions, Apply cancelled at the confirmation, Graph not read during Collect |
+### Calendar Sharing is not the same as Free/Busy cutover
 
-# Part III · Troubleshoot
+**Calendar Sharing:** applicable X-TAP takes precedence over Sharing Policies. Leave those policies **enabled during the first tests**. You do not need to disable one to “activate” X-TAP. If X-TAP offers a higher level than the legacy policy, record the observation, but still test the approved full workflow.
+
+**Free/Busy and MailTips:** legacy relationships/address spaces have precedence. Any switch away from them is a separate manual, coordinated change with the partner, using the detailed [cutover and test procedure](XTapSharingMigration-Guide.md#11-after-the-script--partner-window-cutover-tests).
+
+**Wildcard Sharing Policies:** the `*` rule may serve on-premises/hybrid recipients that X-TAP cannot replace. Retirement and cleanup commands are commented out for review; do not uncomment them without checking those dependencies.
+
+### When to stop or roll back
+
+Stop if a user outside the scope becomes visible, more detail than approved is exposed, an expected test fails, or a published calendar is lost. Preserve the observations and return to the agreed baseline.
+
+`ManualCutover.txt` contains **legacy Exchange** restore proposals, not a complete undo of groups, trusts or X-TAP capabilities. Re-enabling a Sharing Policy does **not** override applicable X-TAP Calendar Sharing. Review the saved capability baseline separately; never reset the entire default policy to try to recover.
+
+Only retire legacy rules after actual replacement functionality and dependencies have been verified and a stable observation period has been agreed. Keep backups. A new Collect after stabilization gives you the closing inventory.
 
 <!-- icon: lifebuoy -->
-## 5. If something does not work
+## 7. Understand the result and fix common problems
 
-| Symptom | Cause and what to do |
+### Find the right files
+
+Every command prints its own output folder. Do not look only in the first Collect folder for later reports.
+
+| File | Use |
 |---|---|
-| `A window handle must be configured` | Interactive Graph sign-in from a host without a console window. Run from Windows Terminal, or set `Authentication.Mode = 'DeviceCode'`. |
-| `Microsoft Graph is connected to tenant …` | Wrong account or wrong tenant: sign out, or set `Authentication.ExchangeAdmin` / `EntraAdmin`. |
-| `No Collect run found for this tenant` | Plan or Apply on another computer, or another `Output.Path`: copy the Collect folder and give `-SnapshotPath` (1.4). |
-| `0 item(s) migrated` — *No change made* | Step 2 of Plan / Apply and the summary give the reason for every item. A relationship or a sharing policy **disabled** in Exchange Online is out of scope: re-enable it and collect again, or force it in `Selection.csv` (3.3). Hybrid and on-premises items cannot be forced. |
-| *Cancelled (answer …, YES expected)* | Any answer other than `YES` cancels the Apply: nothing is changed, exit code `2`. Run again and type `YES`, or add `-Force`. |
-| **Phase Entra - nothing to change** | Read the *Why* line: *not needed* (only default-policy capabilities for All users — run `-Phase Exchange`), *already in place*, or no item migrated. Exit code `0`. |
-| Partner **Blocked**: tenant ID not confirmed | Add the `Partners` entry with the `TenantId` confirmed by the partner (3.2). |
-| Capability **Blocked**: run -Phase Entra first | The trust or a group is not created yet: run the Entra phase, then this one again (3.5). |
-| Item **Blocked**: several levels of … found | Answer the question of an interactive Plan or Apply, or set the level in `Selection.csv` or a `Partners` rule. |
-| Availability address space not configured | Normal: the **partner** configures the X-TAP equivalent in its own tenant, for your tenant ID. |
-| Free/Busy grey after the cutover | Allow time for caches; check that the target user has a licensed Exchange Online mailbox and is in the scope group; test with the full SMTP address. |
-| Free/Busy **Unknown**, `responseCode 5016` | The user is not in the scope of the capability: check the scope group and its members. |
-| `GetSchedule is not supported for domain … 62382`, `responseCode 7002` | Exchange Online does not serve this domain through X-TAP for this pair of tenants at the time of the test. Check the rollout in both tenants (1.3), the capability and its scope, the old objects on both sides; wait and test again. |
-| MailTips: no automatic reply shown, no error | MailTips out of scope are silent: check the scope with a user whose automatic reply is on. |
-| Calendar share: `ErrorNotAllowedExternalSharingByPolicy` | The share is refused: calendar sharing not yet available through X-TAP in this tenant (1.3), or neither the capability nor the sharing policy allows it. |
+| `Inventory.html` | What Collect found |
+| `Plan.html` | What the next Apply would change |
+| `Result.html` | What this Apply changed, skipped or failed to verify |
+| `snapshot.json` and `SharingPolicyMailboxes.csv` | Inputs from the original Collect; keep together |
+| `PartnersToConfirm.txt` | Partner identity coordination |
+| `ManualCutover.txt` and `backup\` | Manual legacy-change proposals and original Exchange exports |
+| `logs\` in the tool folder | Console/diagnostic history; treat as private tenant data |
 
-Anything else — including what the browser developer tools show for each feature, with the real captures: [developer guide, Annex A](XTapSharingMigration-Guide.md#annex-a--troubleshooting) and [chapter 11](XTapSharingMigration-Guide.md#11-after-the-script--partner-window-cutover-tests).
+Screenshots in the guides are examples, not evidence that your own run succeeded. A phase with **nothing to change** may be correct; read the **Why** and **Next** lines.
+
+### Stop and read the last error
+
+| What you see | First safe action |
+|---|---|
+| Script not found / “not recognized” | Return to the folder containing `Invoke-XTapSharingMigration.ps1`. Check with `Get-Item`. |
+| Module not found or version conflict | Finish module installation, close PowerShell, reopen 7 and return to the tool folder. |
+| Wrong tenant/account | Cancel. Check your configuration and the selected account. Do not change the safety check to match a wrong session. |
+| No Collect found / wrong snapshot | Use the actual Collect folder from your tenant. Set `$run` again in this window. |
+| Partner unconfirmed / Mismatch | Confirm the tenant ID with the partner; correct the existing `Partners` entry. |
+| Missing/incomplete mailbox assignments | Keep the default collection of mailbox assignments enabled, run a fresh Collect, and review the new Plan. Do not choose All just to pass the check. |
+| Extra members in a policy group | Compare membership with a fresh Collect. Have the owner review the extra users; the tool will not remove them automatically. |
+| `All/user` versus `All/group` conflict | The types are different. Review scope and exposure before choosing Replace; Keep deliberately preserves the existing setting. |
+| Several detail levels / Conflict | Review intended access with the owner. Do not automatically choose the highest level or replace all existing settings. |
+| “YES expected” | Apply was cancelled before execution. Rerun only if you now intend the reviewed changes; do not add `-Force` just to hide the prompt. |
+| Calendar share refused / only availability offered | Review the capability, scope, effective trust and current service behavior. A policy error does not identify a single cause or a fixed waiting time. Keep fallback policies intact while investigating. |
+| Green Result, but sharing still fails | Configuration readback is not a runtime test. Record exact response/time and check with the partner; do not repeatedly reapply unchanged policies. |
+
+Exit code **0** means the command succeeded; **1** means an error/action failed; **2** means review is needed (blocked, cancelled, skipped or unverified work, or an incomplete collection). These codes are not a certification of working external sharing.
+
+For certificate mode, every configuration option, browser traces and advanced recovery, use the [technical guide](XTapSharingMigration-Guide.md). Before requesting help, remove addresses and configuration details as appropriate; never share passwords, tokens, cookies or raw browser HAR files.

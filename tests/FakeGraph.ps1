@@ -47,7 +47,7 @@ function Invoke-FakeGraph {
     $checkScopes = {
         param($cap)
         foreach ($s in @($cap.inboundAccess.resourceScopes.included)) {
-            if ($s.resourceType -eq 'group' -and -not $T.Groups.ContainsKey($s.resourceId)) { throw (New-FakeGraphError 400 'Request_BadRequest' "Group $($s.resourceId) not found") }
+            if ($s.resourceId -ine 'All' -and $s.resourceType -eq 'group' -and -not $T.Groups.ContainsKey($s.resourceId)) { throw (New-FakeGraphError 400 'Request_BadRequest' "Group $($s.resourceId) not found") }
         }
     }
     $newCap = {

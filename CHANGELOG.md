@@ -1,66 +1,62 @@
-# Changelog — X-TAP Sharing Migration
+# Changelog
 
-All notable changes are listed here. Versions follow MAJOR.MINOR.PATCH (see the guide, Annex E).
-Author: Nicolas Fabert.
+X-TAP Sharing Migration · Nicolas Fabert
 
-## [1.0.3] — 2026-10-02
+[Latest release](https://github.com/Nico77600/XTapSharingMigration/releases/latest) · [User guide](package/docs/XTapSharingMigration-UserGuide.md)
 
-### Fixed
-- **Apply confirmation**: `YES` is accepted in any case (`yes`, `Yes`), spaces ignored. Any other answer still cancels, but the console now says which answer was refused and that `YES` was expected, and the summary card is titled **Phase … cancelled - nothing was changed** with the changes not applied and the command to run again (it said *Phase … applied - with items to look at*). The cancellation is also the first warning of `Result.html`. Exit code `2`, as before.
-- The **In place** line of an Apply summary, and the *Already in place* figure of `Result.html`, count the actions of the phase that ran only (an Exchange capability already in place was counted in the Entra phase).
+## 1.0.4 — 9 November 2026
 
-### Added
-- **Why a phase has nothing to change**: when an Apply (or one phase of a Plan) has nothing to change, the console, the summary card (*Why* and *Next* lines) and `Result.html` say why, in plain words: *not needed* (only Anonymous / `*` sharing policy entries for All users: they go to the default policy, so phase Entra needs no partner trust and no security group - run `-Phase Exchange`), *already in place* (the trusts, groups or capabilities, by name), *blocked* (with the next step, for example `-Phase Entra first`) or *no item is migrated*. The phase section of the console gives the same explanation instead of *Nothing in this phase*, and the Plan summary gives the next command that has something to do. An Apply with nothing to do is titled **Phase … - nothing to change**.
-- **Why nothing is migrated**: step 2 of Plan and Apply gives the number of items not migrated and their reasons (out of scope: Hybrid, Disabled, TenantNotFound …; `Include = No` in `Selection.csv`; a `Features` or `Partners` rule; `-Feature`), and how many of them `Selection.csv` can force (Disabled, Unused, PartnerSide), with the path of the file. The same line is in the summary card (Plan, Apply), and Collect gives the count that can be forced.
-- Guide: a note in chapter 2 (*When phase Entra has nothing to do*), the Phase Entra step of chapter 8, three rows in Annex A (*0 item(s) migrated*, *Cancelled … YES expected*, *Phase Entra - nothing to change*); exit code `2` also covers a cancelled Apply.
-- 50 Pester tests.
+### What changed for you
 
-### Changed
-- An Apply counts as its own problems only the blocked actions **of its phase**: an Exchange capability in conflict no longer turns an Entra phase into *applied - with items to look at* (exit code `2`); it is listed on the *Other* line (*phase Exchange: 5 change(s) to do, 1 blocked or in conflict*).
+- **Calendar Sharing scopes are written correctly.** An explicit `All` uses `All/group` for both named sharing and Anonymous publishing. Free/Busy and MailTips keep `All/user`.
+- **Plan detects the difference.** Resource type is part of scope comparison. An old `All/user` is no longer reported as matching `All/group`; `Keep` preserves it and reports a conflict. `Merge` requires a deliberate `Replace` to change a differently typed `All`.
+- **Each Sharing Policy keeps its own users.** Even a single policy defaults to a mailbox security group instead of an assumed tenant-wide scope. Missing or incomplete assignments and extra group members block automatic policy-scoped actions pending review. Members are never removed automatically.
+- **Cutover instructions are feature-specific.** Test Calendar Sharing while Sharing Policies remain enabled. Wildcard retirement and cleanup commands are commented out to protect on-premises/hybrid dependencies. Re-enabling a Sharing Policy alone does not override applicable X-TAP capabilities.
+- **Getting started is clearer.** Latest-release links point to the ready-to-run ZIP; the guides separate download, configuration, read-only steps and changes. Reports distinguish stored configuration from working sharing.
 
-### Documentation
-- README and guide: the `Install-Module` commands use `-Force`, with what to do when an older version still conflicts; the README links and the guide summary come before the download note.
+### Observations behind these changes
 
-## [1.0.2] — 2026-10-01
+Testing showed that the detail levels offered to users can differ from what the legacy Sharing Policies are set to, and that they can change after the X-TAP settings have been applied. This supports testing applicable X-TAP directly without disabling the fallback, but does **not** isolate propagation, a service update or the scope change as the cause.
 
-### Fixed
-- **Two administrators**: `-Mode Plan -Phase Entra` now expects the `Authentication.EntraAdmin` account (it expected `ExchangeAdmin`, so the Entra administrator was refused without `-UserPrincipalName`), and a level chosen during the Entra phase is recorded in `LevelChoices.json` under the account of that run. One function, `Get-XsmExpectedAccount`, gives the account of every mode and phase.
+The script could also write `All/user` and then treat it as equivalent to `All/group`. Offline regressions now cover the exact payload, scope mismatch detection, policy membership and repeat-run behavior. Offered levels and configuration readback are **not** proof of a completed invitation, acceptance or calendar-read workflow.
 
-### Documentation
-- Guide chapter 8 — **Two administrators**: the Entra and Exchange phases run separately from the same Collect folder — what to hand over (the Collect folder and the configuration, or a shared copy of the tool), `-SnapshotPath` and `-UserPrincipalName`, the same `-SelectionPath` / `-Feature`, the order and what the Exchange phase does when it runs first. Matching example in the script help and the README, two rows in Annex A, prerequisites (the Entra administrator needs only `Microsoft.Graph.Authentication`).
-- README redesigned like the other repositories: light and dark graphics rendered from the guide (`tools\New-ReadmeImages.ps1`), How it works, From inventory to cutover, Reports grid, requirements per phase.
-- 47 Pester tests.
+**Before upgrading:** use a fresh Collect, review saved configuration and `Selection.csv` overrides, then run Plan. `All` remains available when you explicitly want tenant-wide sharing.
 
-## [1.0.1] — 2026-10-01
+**Checks recorded at the time:** 61 offline Pester tests, including regressions for the scope payload, scope comparison, Sharing Policy membership and repeat runs.
 
-### Changed
-- **Exchange hybrid and partners on Exchange Server are out of scope, and can no longer be forced.** An item classified **OnPremises** (organization relationship or availability address space whose partner endpoint is not Exchange Online) was overridable in `Selection.csv`; it is now refused, like **Hybrid**. Both are checked before every other reason (a disabled or unused hybrid / on-premises object is still reported as Hybrid / OnPremises), and the item notes give the endpoint host and the reason. The guide says it from the principles on, with a dedicated box in chapter 3 (Exchange hybrid: dedicated hybrid application; partners on Exchange Server: not impacted today according to Microsoft).
+## 1.0.3 — 2 October 2026
 
-### Added
-- Guide chapter 11 — **what the browser shows**: for Free/Busy (`GetSchedule`), MailTips (`GetMailTips`) and calendar sharing (`GetSharingPermissionInfo`, `CreateSharingPermission`), the action to do in Outlook on the web, the request to filter in the developer tools, and what is expected or not, with illustrations rebuilt from lab captures of both directions (in scope, out of scope with error `5016`, `7002` when X-TAP is not used, MailTips out of scope that are silent, share refused with `ErrorNotAllowedExternalSharingByPolicy` while calendar sharing was still rolling out). Annex A has the matching rows.
-- 46 Pester tests.
-## [1.0.0] — 2026-10-01
+- **Clearer confirmation.** `YES`, `yes` and surrounding spaces are accepted; any other answer cancels and says why. Cancellation changes nothing and keeps exit code `2`.
+- **Phase-specific summaries.** Already-in-place counts and blocked actions are attributed to the phase being run.
+- **A useful “nothing to do” result.** The console and reports explain whether settings are already in place, the phase is unnecessary, items are blocked or nothing was selected, with the next step.
+- **Clearer setup guidance.** Module installation and two-administrator instructions were expanded.
+
+**Checks recorded at the time:** 50 offline Pester tests. The changes addressed confusing cancellation and no-change summaries, not new sharing permissions.
+
+## 1.0.2 — 1 October 2026
+
+- **The right administrator is expected.** `Plan -Phase Entra` uses the Entra account; recorded level choices use the account of the current run.
+- **Two-administrator handover is documented.** Both phases use the same Collect folder, configuration and selection.
+- **README presentation was refreshed.** Light/dark graphics and clearer report previews were added.
+
+**Checks recorded at the time:** 47 offline Pester tests.
+
+## 1.0.1 — 1 October 2026
+
+- **Hybrid and on-premises partners stay excluded.** They can no longer be forced into migration through `Selection.csv`, even when disabled or unused.
+- **Troubleshooting shows what to inspect.** Browser examples distinguish Free/Busy, silent MailTips and a calendar share refused by policy.
+
+**Observations behind the change:** browser captures showed that offered sharing levels could still be followed by a refused share. Out-of-scope MailTips could look like “no automatic reply”. The recorded offline suite had 46 tests.
+
+## 1.0.0 — 1 October 2026
 
 First public version.
 
-### Added
-- **Collect** (read-only): organization relationships (with their scope groups), availability address spaces, sharing policies and the mailboxes assigned to each of them, accepted domains, hybrid objects; current Microsoft 365 X-TAP (default and partner policies, trusts, capabilities, scope group names); Microsoft Entra tenant of each external domain (OpenID metadata, partner name from Microsoft Graph). Writes `Inventory.html`, `snapshot.json`, `Selection.csv`, `PartnersToConfirm.txt`, `SharingPolicyMailboxes.csv` and an `Export-Clixml` backup of the Exchange objects.
-- **One partner configuration per tenant**: every relationship, domain or sharing policy entry of the same tenant ends in one partner policy, one trust and one capability per feature and level (scopes added).
-- **Classification** of every item, in scope or out of scope with the reason: Hybrid, SameTenant, OnPremises, Disabled, Unused, TenantNotFound, Consumer, ResolutionError, NotMigratable, PartnerSide.
-- **Availability address spaces** are **PartnerSide**: they let your users read the partner's free/busy, so their X-TAP equivalent is configured by the partner for your tenant ID. Nothing is configured in your tenant unless forced; the partner appears in the coordination list with what to configure; the address space is in the cutover.
-- **Level choice**: several levels of the same feature for the same partner and users (for example `AvailabilityOnly` and `LimitedDetails` on two relationships) are listed by Collect and asked by an interactive Plan or Apply; answers recorded in `LevelChoices.json` next to the snapshot. Unanswered: only these items are blocked. Several sharing policies in use: one security group of mailboxes per policy (`SharingPolicy:<name>`).
-- **Decisions** in this order: `Selection.csv`, `Partners` rule, `Features` rule, Exchange Online. Forced level, scope (All, object ID, configuration group, existing group by name, sharing policy group, several scopes) and partner exclusion.
-- **Partner tenant ID confirmation** (`Entra.RequireConfirmedPartners`): `Partners` entry with `TenantId`, `TargetTenantId` of an availability address space, or existing partner policy; mismatch between the tenant ID given by the partner and the tenant of its domain blocks the partner.
-- **Plan** and **Apply** in two phases — **Entra** (security groups, Microsoft 365 collaboration trust) and **Exchange** (capabilities in partner and default policies) — with confirmation, retries, skipped actions when a dependency failed, and verification by reading the tenant again. `-Phase All` for a Global Administrator.
-- **`-Feature`** (Plan, Apply): limit a run to some features — FreeBusy, MailTips, CalendarSharing, AnonymousCalendarSharing — while a capability is not yet rolled out; the other items are listed as not in this run, above every other rule, and the cutover warns on relationships partly migrated.
-- `Apply.ExistingCapability` = **Keep** (default) | Merge | Replace, `Apply.DisableOtherLevels`, `Entra.ReplaceRestrictedTrust`.
-- **Manual cutover** commands per Exchange object, with rollback and cleanup, in the reports and `ManualCutover.txt`; the tool never runs them. Guide chapter 11: rollout check, partner contact (message template), change window, pre-checks, test matrix, `GetSchedule` in the browser developer tools, GO / STOP, rollback, cleanup.
-- Self-contained **HTML reports** (Inventory, Plan, Result), same visual identity as Purview DLP Report; CSV of the actions; console with steps, tables and summary card; daily log file.
-- **Tests**: 45 Pester tests with a simulated tenant and an in-memory Microsoft Graph; `tests\New-DemoReports.ps1`.
-- `tools\Build-Documentation.ps1` (HTML guide) and `tools\New-XsmPackage.ps1` (release package, tenant values emptied and checked).
+- **Collect:** read-only inventory of Exchange Online sharing, mailbox assignments, X-TAP settings and partner domains, with reports and Exchange object backups.
+- **Plan:** preview the target configuration, confirm partner tenant IDs and choose users and detail levels.
+- **Apply:** separate Entra and Exchange phases, confirmation, dependency handling and configuration readback.
+- **Keep by default:** preserve existing capabilities rather than silently widen their scopes.
+- **Manual cutover:** proposed Exchange commands with warnings and rollback, never executed by the tool.
+- **Offline reports and guides:** HTML, CSV, console summaries, packaging and documentation tools.
 
-### Lab findings (2026-10-01), built into 1.0.0
-- ExchangeOnlineManagement loads `Microsoft.IdentityModel` 8.19 into the session; a later interactive Graph sign-in then fails with "Method not found … WithLogging". **Collect signs in to Microsoft Graph first**, then Exchange Online.
-- `Connect-MgGraph -UseDeviceCode` writes its message to the output stream: it is now shown in the console. The device code limit of the Graph module is 120 seconds.
-- A Free/Busy capability scoped by hand to a group would have been widened to all users by a plain update: hence `ExistingCapability = Keep` by default.
-- The default cross-tenant access policy shows `m365CollaborationInbound` blocked when it was never configured; the tool reports it and never changes the default trust.
+**Observations behind the defaults:** authentication order mattered when Graph and Exchange modules shared a session; an existing group scope must not be widened silently; default collaboration trust must be reported rather than automatically changed. The recorded offline suite had 45 tests.

@@ -3,7 +3,7 @@
 <#
     X-TAP Sharing Migration - automated tests (Pester 5 or later).
     Author  : Nicolas Fabert
-    Version : 1.0.3
+    Version : 1.0.4
 
     Run:  Invoke-Pester -Path .\tests -Output Detailed
 
@@ -383,7 +383,7 @@ Describe 'Plan and apply against an in-memory tenant' {
         @($actions | Where-Object { $_.Kind -eq 'Trust' -and $_.PartnerTenantId -eq $TestTenant.Northwind })[0].Operation | Should -Be 'Create'
         $anon = @($actions | Where-Object { $_.Capability -eq 'anonymousCalendarSharingFreeBusyReviewer' })[0]
         $anon.Operation | Should -Be 'Conflict'    # All today, the target is the Default Sharing Policy mailboxes: kept (ExistingCapability = Keep)
-        $anon.Before | Should -Be 'All users'
+        $anon.Before | Should -Be 'All users (All/user)'
         $anon.Detail | Should -Match 'Keep'
         $fb = @($actions | Where-Object { $_.Capability -eq 'crossTenantCalendarAvailabilityLimitedDetails' })[0]
         $fb.Operation | Should -Be 'Create'
@@ -469,7 +469,7 @@ Describe 'Plan and apply against an in-memory tenant' {
         $x.Next | Should -Match '-Phase Entra first'
         Get-XsmPhaseExplanation -Target $script:Target -Actions $exo -Phase Entra | Should -BeNullOrEmpty
     }
-    It 'adds the missing members of a sharing policy group without removing any' {
+    It 'blocks a sharing policy group with extra members without removing any' {
         $live = Get-XsmLiveState -Target $script:Target -Members
         $a = New-XsmActions -Target $script:Target -Live $live -Settings $script:Settings -Phase Entra
         $null = Invoke-XsmActions -Actions $a -Live $live 6>$null
@@ -477,8 +477,10 @@ Describe 'Plan and apply against an in-memory tenant' {
         $g.members.RemoveAt(0); $g.members.Add('99999999-0000-0000-0000-000000000099')
         $actions = New-XsmActions -Target $script:Target -Live (Get-XsmLiveState -Target $script:Target -Members) -Settings $script:Settings -Phase Entra
         $add = @($actions | Where-Object { $_.Kind -eq 'Group' -and $_.Target -eq 'SG-XTAP-SharingPolicy-VIP' })[0]
-        $add.Operation | Should -Be 'AddMembers'
-        $add.Notes -join ' ' | Should -Match 'never removes'
+        $add.Operation | Should -Be 'Blocked'
+        $add.Detail | Should -Match 'never removes'
+        $exchange = New-XsmActions -Target $script:Target -Live (Get-XsmLiveState -Target $script:Target) -Settings $script:Settings -Phase Exchange
+        @($exchange | Where-Object { $_.Kind -eq 'Capability' -and $_.Capability -eq 'crossTenantCalendarSharingFreeBusyReviewer' })[0].Operation | Should -Be 'Blocked'
     }
     It 'keeps, merges or replaces a capability that exists with another scope' {
         # Fabrikam MailTips exists today for the group FB-Scope; the target is the configuration group FreeBusy-Fabrikam.
@@ -659,7 +661,9 @@ Describe 'Reports' {
     It 'writes the manual cutover commands with the rollback, keeping the entries not migrated' {
         $cut = Get-XsmCutover -Snapshot $script:Snap -Target $script:Target
         $default = @($cut.Steps | Where-Object Name -eq 'Default Sharing Policy')[0]
-        $default.Commands[0] | Should -Match "Set-SharingPolicy -Identity 'Default Sharing Policy' -Domains 'fabrikam.com:ContactsSharing', 'outlook.com:CalendarSharingFreeBusySimple'"
+        $default.Commands[0] | Should -Be "# Set-SharingPolicy -Identity 'Default Sharing Policy' -Domains 'fabrikam.com:ContactsSharing', 'outlook.com:CalendarSharingFreeBusySimple'"
+        $default.Warnings -join ' ' | Should -Match 'test with this policy enabled'
+        $default.Warnings -join ' ' | Should -Match 'on-premises and hybrid'
         $default.Rollback[0] | Should -Match "Anonymous:CalendarSharingFreeBusyReviewer"
         $fab = @($cut.Steps | Where-Object Name -eq 'Fabrikam')[0]
         $fab.Commands[0] | Should -Be "Set-OrganizationRelationship -Identity 'Fabrikam' -Enabled `$false"
@@ -669,6 +673,7 @@ Describe 'Reports' {
         $file = Join-Path $script:Work 'ManualCutover.txt'
         Export-XsmCutoverText -Cutover $cut -Path $file -Settings $script:Settings
         (Get-Content $file -Raw) | Should -Match 'Your tenant ID'
+        (Get-Content $file -Raw) | Should -Match 'Re-enabling a Sharing Policy does not override'
         $aas = @($cut.Steps | Where-Object Name -eq 'adatum.com')[0]
         $aas.Commands[1] | Should -Match 'Remove-AvailabilityAddressSpace'
         $aas.Warnings[0] | Should -Match 'only after the partner has allowed'
@@ -686,6 +691,159 @@ Describe 'Reports' {
         $json = [regex]::Match($html, '(?s)<script type="application/json" id="xsm-data">(.*?)</script>').Groups[1].Value
         ($json | ConvertFrom-Json).Warnings[0] | Should -Be '</script><script>alert(1)</script>'
         $html | Should -Not -Match 'https?://(?!graph\.microsoft\.com|learn\.microsoft\.com)[a-z]'   # no external resource
+    }
+}
+
+Describe 'Calendar Sharing procedure alignment' {
+    BeforeEach {
+        $script:Fake = New-FakeTenant
+        Set-FakeGraph $script:Fake
+        $script:Snap = Get-TestSnapshot
+    }
+    It 'uses group for explicit Calendar Sharing All and user for FreeBusy and MailTips All' {
+        $s = Set-TestSettings {
+            param($s)
+            foreach ($feature in 'FreeBusy', 'MailTips', 'CalendarSharing', 'AnonymousCalendarSharing') {
+                $s.Features[$feature].Scope = 'All'
+            }
+            $s.Features.CalendarSharing.Level = 'Reviewer'
+            $s.Apply.ExistingCapability = 'Replace'
+        }
+        $target = New-XsmTargetState -Snapshot $script:Snap -Settings $s
+        $live = Get-XsmLiveState -Target $target
+        $actions = New-XsmActions -Target $target -Live $live -Settings $s
+        $null = Invoke-XsmActions -Actions $actions -Live $live 6>$null
+        @($actions | Where-Object Status -eq 'Failed').Count | Should -Be 0
+        foreach ($a in @($actions | Where-Object { $_.Kind -eq 'Capability' -and $_.Operation -in 'Create', 'Update' })) {
+            $raw = if ($a.Ref.Target -eq 'Default') {
+                $script:Fake.Default.Caps[$a.Capability]
+            } else { $script:Fake.Partners[$a.PartnerTenantId].Caps[$a.Capability] }
+            $included = @($raw.inboundAccess.resourceScopes.included)
+            $included.Count | Should -Be 1
+            $included[0].resourceId | Should -BeExactly 'All'
+            $included[0].resourceType | Should -BeExactly $(if ($a.Feature -in 'CalendarSharing', 'AnonymousCalendarSharing') { 'group' } else { 'user' })
+            $raw.'@odata.type' | Should -BeExactly "#microsoft.graph.$($a.Capability)"
+            @($raw.inboundAccess.resourceScopes.excluded).Count | Should -Be 0
+        }
+        @($actions | Where-Object { $_.Feature -eq 'CalendarSharing' -and $_.Ref.Target -eq 'Partner' }).Count | Should -BeGreaterThan 0
+        @($actions | Where-Object { $_.Feature -eq 'CalendarSharing' -and $_.Ref.Target -eq 'Default' }).Count | Should -BeGreaterThan 0
+        @($actions | Where-Object Feature -eq 'AnonymousCalendarSharing').Count | Should -Be 1
+        $after = New-XsmActions -Target $target -Live (Get-XsmLiveState -Target $target) -Settings $s
+        @($after | Where-Object Operation -ne 'NoChange').Count | Should -Be 0
+        Set-XsmVerification -Actions $actions -After $after
+        @($actions | Where-Object { $_.Status -eq 'Done' -and $_.Verified -ne 'Verified' }).Count | Should -Be 0
+    }
+    It 'detects wrong All resource types in inventory and Keep Merge Replace planning' {
+        $s = Set-TestSettings {
+            param($s)
+            $s.RunFeatures = @('AnonymousCalendarSharing')
+            $s.Features.AnonymousCalendarSharing.Scope = 'All'
+            $s.Apply.DisableOtherLevels = $true
+        }
+        $item = Get-Item $script:Snap 'SP01-01'
+        $item.DiscoveredScope = 'All'
+        $item.XtapStatus = ''
+        InModuleScope XTapSharingMigration -Parameters @{ Item = $item; Xtap = $script:Snap.Xtap } {
+            param($Item, $Xtap)
+            Set-XsmItemXtapStatus $Item $Xtap
+        }
+        $item.XtapStatus | Should -Be 'PresentOtherScope'
+        $target = New-XsmTargetState -Snapshot $script:Snap -Settings $s
+        $script:Fake.Default.Caps['anonymousCalendarSharingFreeBusySimple'] = New-FakeCapability 'anonymousCalendarSharingFreeBusySimple' $true @(@{ resourceId = 'All'; resourceType = 'user' })
+        foreach ($mode in 'Keep', 'Merge', 'Replace') {
+            $s.Apply.ExistingCapability = $mode
+            $actions = New-XsmActions -Target $target -Live (Get-XsmLiveState -Target $target) -Settings $s
+            $reviewer = @($actions | Where-Object Capability -eq 'anonymousCalendarSharingFreeBusyReviewer')[0]
+            $reviewer.Operation | Should -Be $(if ($mode -eq 'Replace') { 'Update' } else { 'Conflict' })
+            if ($mode -ne 'Replace') { @($actions | Where-Object Operation -eq 'Disable').Count | Should -Be 0 }
+        }
+        $script:Fake.Default.Caps['anonymousCalendarSharingFreeBusyReviewer'].inboundAccess.resourceScopes.included[0].resourceType = 'group'
+        $s.Apply.ExistingCapability = 'Keep'
+        @((New-XsmActions -Target $target -Live (Get-XsmLiveState -Target $target) -Settings $s) |
+            Where-Object Capability -eq 'anonymousCalendarSharingFreeBusyReviewer')[0].Operation | Should -Be 'NoChange'
+    }
+    It 'compares group IDs and user IDs with the same spelling as distinct scopes' {
+        InModuleScope XTapSharingMigration {
+            $id = '11111111-2222-4333-8444-555555555555'
+            Test-XsmScopeMatch @(@{ ResourceId = $id; ResourceType = 'user' }) @($id) CalendarSharing | Should -BeFalse
+            Test-XsmScopeMatch @(@{ ResourceId = $id; ResourceType = 'group' }) @($id) CalendarSharing | Should -BeTrue
+            Test-XsmScopeMatch @(@{ ResourceId = 'All'; ResourceType = 'group' }) @('All') FreeBusy | Should -BeFalse
+            Test-XsmScopeMatch @(@{ ResourceId = 'All'; ResourceType = 'user' }) @('All') MailTips | Should -BeTrue
+        }
+    }
+    It 'defaults even a single enabled policy to its mailbox group, not All' {
+        $snapshot = New-TestSnapshot
+        $snapshot.Exchange.SharingPolicies = @($snapshot.Exchange.SharingPolicies | Where-Object Default)
+        $class = Get-XsmMigrationItems -Snapshot $snapshot -Settings $script:Settings
+        foreach ($item in @($class.Items | Where-Object Source -eq 'SharingPolicy')) {
+            $item.DiscoveredScope | Should -Be 'SharingPolicy:Default Sharing Policy'
+        }
+        $snapshot.Items = $class.Items
+        $snapshot.Directory = $script:Snap.Directory
+        $target = New-XsmTargetState -Snapshot $snapshot -Settings $script:Settings
+        @($target.Groups | Where-Object Kind -eq 'SharingPolicy').Count | Should -Be 1
+        @($target.Groups | Where-Object Kind -eq 'SharingPolicy')[0].MemberIds.Count | Should -Be 3
+    }
+    It 'does not migrate an unused default policy automatically' {
+        $snapshot = New-TestSnapshot
+        $snapshot.Exchange.SharingPolicies[0].Mailboxes = 0
+        $class = Get-XsmMigrationItems -Snapshot $snapshot -Settings $script:Settings
+        @($class.Items | Where-Object SourceName -eq 'Default Sharing Policy')[0].Reason | Should -Be 'Unused'
+    }
+    It 'blocks missing or incomplete policy membership instead of assuming tenant-wide access' {
+        $target = New-XsmTargetState -Snapshot $script:Snap -Settings $script:Settings -MailboxesByPolicy @{}
+        $actions = New-XsmActions -Target $target -Live (Get-XsmLiveState -Target $target) -Settings $script:Settings
+        foreach ($group in @($actions | Where-Object { $_.Kind -eq 'Group' -and $_.Ref.Kind -eq 'SharingPolicy' })) {
+            $group.Operation | Should -Be 'Blocked'
+            $group.Detail | Should -Match 'missing or incomplete'
+        }
+        $snapshot = New-TestSnapshot
+        $snapshot.Exchange.SharingPolicies[0].Mailboxes = $null
+        $snapshot.Items = (Get-XsmMigrationItems -Snapshot $snapshot -Settings $script:Settings).Items
+        $snapshot.Directory = $script:Snap.Directory
+        @($snapshot.Items | Where-Object SourceName -eq 'Default Sharing Policy')[0].Reason | Should -Not -Be 'Unused'
+        $incomplete = New-XsmTargetState -Snapshot $snapshot -Settings $script:Settings
+        @($incomplete.Groups | Where-Object Policy -eq 'Default Sharing Policy')[0].MembershipDataComplete | Should -BeFalse
+        $snapshot = New-TestSnapshot
+        $snapshot.Exchange.MailboxAssignmentsCollected = $false
+        $snapshot.Items = (Get-XsmMigrationItems -Snapshot $snapshot -Settings $script:Settings).Items
+        $snapshot.Directory = $script:Snap.Directory
+        $target = New-XsmTargetState -Snapshot $snapshot -Settings $script:Settings
+        @($target.Groups | Where-Object { $_.Kind -eq 'SharingPolicy' -and $_.MembershipDataComplete }).Count | Should -Be 0
+        $s = Set-TestSettings { param($s) $s.Features.CalendarSharing.Scope = 'All'; $s.Features.AnonymousCalendarSharing.Scope = 'All' }
+        $explicit = New-XsmTargetState -Snapshot $snapshot -Settings $s
+        @($explicit.Groups | Where-Object Kind -eq 'SharingPolicy').Count | Should -Be 0
+        @($explicit.Decisions | Where-Object { $_.Item.Source -eq 'SharingPolicy' -and $_.Decision.Include })[0].Decision.Warnings -join ' ' | Should -Match 'Explicit tenant-wide'
+    }
+    It 'does not inherit the implicit All assumption from an older snapshot' {
+        $item = Get-Item $script:Snap 'SP01-01'
+        $item.DiscoveredScope = 'All'
+        (Get-XsmItemDecision -Item $item -Settings $script:Settings).Scope | Should -Be 'SharingPolicy:Default Sharing Policy'
+    }
+    It 'combines different policies at the same fidelity as concrete included groups' {
+        $s = Set-TestSettings { param($s) $s.Features.CalendarSharing.Level = 'Simple'; $s.Apply.ExistingCapability = 'Replace' }
+        $target = New-XsmTargetState -Snapshot $script:Snap -Settings $s
+        foreach ($phase in 'Entra', 'Exchange') {
+            $live = Get-XsmLiveState -Target $target -Members
+            $actions = New-XsmActions -Target $target -Live $live -Settings $s -Phase $phase
+            $null = Invoke-XsmActions -Actions $actions -Live $live 6>$null
+            @($actions | Where-Object Status -eq 'Failed').Count | Should -Be 0
+        }
+        $included = @($script:Fake.Default.Caps['crossTenantCalendarSharingFreeBusySimple'].inboundAccess.resourceScopes.included)
+        $included.Count | Should -Be 2
+        foreach ($scope in $included) { $scope.resourceType | Should -Be 'group'; $scope.resourceId | Should -Not -Be 'All' }
+        @((New-XsmActions -Target $target -Live (Get-XsmLiveState -Target $target) -Settings $s) |
+            Where-Object { $_.Kind -eq 'Capability' -and $_.Operation -ne 'NoChange' }).Count | Should -Be 0
+    }
+    It 'adds missing policy members but does not silently retain out-of-policy members' {
+        $target = New-XsmTargetState -Snapshot $script:Snap -Settings $script:Settings
+        $live = Get-XsmLiveState -Target $target
+        $actions = New-XsmActions -Target $target -Live $live -Settings $script:Settings -Phase Entra
+        $null = Invoke-XsmActions -Actions $actions -Live $live 6>$null
+        $group = @($script:Fake.Groups.Values | Where-Object displayName -eq 'SG-XTAP-SharingPolicy-VIP')[0]
+        $group.members.RemoveAt(0)
+        $actions = New-XsmActions -Target $target -Live (Get-XsmLiveState -Target $target) -Settings $script:Settings -Phase Entra
+        @($actions | Where-Object { $_.Kind -eq 'Group' -and $_.Ref.Policy -eq 'VIP' })[0].Operation | Should -Be 'AddMembers'
     }
 }
 

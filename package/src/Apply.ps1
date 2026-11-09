@@ -122,7 +122,7 @@ function Invoke-XsmActions {
                     $included = [Collections.Generic.List[object]]::new()
                     $dependsOnNew = $cap.Target -eq 'Partner' -and $newTrusts.ContainsKey($cap.PartnerTenantId)
                     foreach ($spec in $cap.Specs) {
-                        if ($spec.Kind -eq 'All') { $included.Add(@{ ResourceId = 'All'; ResourceType = 'user' }); continue }
+                        if ($spec.Kind -eq 'All') { $included.Add(@{ ResourceId = 'All'; ResourceType = (Get-XsmAllResourceType $cap.Feature) }); continue }
                         $gk = Get-XsmGroupRequirementKey $spec
                         if ($failedGroups.ContainsKey($gk) -or -not $groupIds.ContainsKey($gk)) { throw (New-XsmSkipException "the scope group '$(Format-XsmScope @($spec))' is not available") }
                         if ($newGroups.ContainsKey($gk)) { $dependsOnNew = $true }
